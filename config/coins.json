@@ -1,0 +1,8 @@
+{
+"ADA":  {"apy": 4.6, "unbond": 0, "exchange": ["binance", "kraken"]},
+"ETH":  {"apy": 4.2, "unbond": 0, "exchange": ["binance", "kraken", "coinbase"]},
+"SOL":  {"apy": 7.1, "unbond": 0, "exchange": ["binance", "kraken"]},
+"DOT":  {"apy": 12.0, "unbond": 28, "exchange": ["kraken"]},
+"ATOM": {"apy": 14.0, "unbond": 21, "exchange": ["kraken"]},
+"PAXG": {"apy": 0,   "unbond": 0, "exchange": ["binance", "kraken"]}
+}

@@ -1,0 +1,28 @@
+# Core trading
+ccxt>=4.0.0
+cryptography>=3.4.8
+
+# Data handling
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Async & Performance
+asyncio>=3.4.3
+aiohttp>=3.8.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Monitoring
+psutil>=5.9.0
+
+### missing imports ###
+
+websockets>=12.0
+streamlit>=1.28.0
+plotly>=5.17.0
+pandas>=2.0.0
+python-binance>=1.0.19
+krakenex>=2.1.0
+coinbase>=2.1.0
+asyncio>=3.4.3

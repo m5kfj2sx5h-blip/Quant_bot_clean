@@ -1,0 +1,38 @@
+{
+"capital": {
+"total_usd": 10000,
+"qbot_pct":  {"BTC": 85, "GOLD": 15},
+"abot_pct":  {"BTC": 15, "GOLD": 0},
+"gbot_pct":  {"BTC":  0, "GOLD": 85}
+},
+"risk": {
+"max_trade_usd": 500,
+"min_spread_pct": 0.08,
+"max_daily_paxg_withdraw_usd": 5000
+},
+"staking": {
+"slots": 6,
+"target_coins": ["ADA", "ETH", "SOL", "DOT", "ATOM"]
+},
+"exchanges": {
+"binance": {"fee": 0.001, "bnb_rebate": true},
+"kraken":  {"fee": 0.0000, "free_monthly": 10000, "subscription": 50},
+"coinbase":{"fee": 0.0000, "free_monthly":  500, "subscription": 50, "usdc_apr": 3.5}
+}
+}
+{
+"capital": { …same… },
+"risk": {
+"max_trade_usd": 500,
+"min_spread_pct": 0.08,
+"max_slip_pct": 0.02,
+"max_daily_paxg_withdraw_usd": 5000,
+"silent_fail_retry": 3
+},
+"auction": {
+"micro_timing_threshold": 0.7,
+"limit_chase": true
+},
+"staking": { …same… },
+"exchanges": { …same… }
+}
