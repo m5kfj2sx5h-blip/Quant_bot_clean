@@ -7,8 +7,8 @@ import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from ..domain.entities import TradingMode, MacroSignal
-from ..domain.aggregates import Portfolio
+from domain.entities import TradingMode, MacroSignal
+from domain.aggregates import Portfolio
 
 logger = logging.getLogger(__name__)
 
