@@ -38,11 +38,11 @@ class ExchangeAdapter(ABC):
             self.exchange.load_markets()
             self.connected = True
 
-            self.logger.info(f"Connected to {self.name}")
+            self.logger.info(f"✅ Connected to {self.name}")
             return True
 
         except Exception as e:
-            self.logger.error(f"Failed to connect to {self.name}: {e}")
+            self.logger.error(f"❌ Failed to connect to {self.name}: {e}")
             return False
 
     @abstractmethod
@@ -70,7 +70,7 @@ class ExchangeAdapter(ABC):
             }
 
         except Exception as e:
-            self.logger.error(f"Error fetching balance from {self.name}: {e}")
+            self.logger.error(f"❌ Error fetching balance from {self.name}: {e}")
             return {}
 
     def get_ticker(self, symbol: Symbol) -> Optional[Dict[str, Any]]:
@@ -82,7 +82,7 @@ class ExchangeAdapter(ABC):
             return self.exchange.fetch_ticker(str(symbol))
 
         except Exception as e:
-            self.logger.error(f"Error fetching ticker from {self.name}: {e}")
+            self.logger.error(f"❌ Error fetching ticker from {self.name}: {e}")
             return None
 
     def get_order_book(self, symbol: Symbol, limit: int = 10) -> Optional[Dict[str, Any]]:
@@ -94,5 +94,5 @@ class ExchangeAdapter(ABC):
             return self.exchange.fetch_order_book(str(symbol), limit)
 
         except Exception as e:
-            self.logger.error(f"Error fetching order book from {self.name}: {e}")
+            self.logger.error(f"❌ Error fetching order book from {self.name}: {e}")
             return None
