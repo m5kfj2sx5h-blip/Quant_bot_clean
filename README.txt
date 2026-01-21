@@ -1,3 +1,14 @@
+UPDATE 1/21/26:
+1. Check exchangewrappers.py : coinbase advanced need attention? refer to env.TEMPLATE
+2. Why am i only seeing buy/sell in USD only?? Why arent we using USDT,USDC and USDT IF AVAILABLE? what ifbwr eun out of USD and all we have left is USDC?
+3. arbitrage should be reviewed:
+	classic: straightforward, find the best profitable opportunitites (min >=0.5%) accross exchanges for the best pair from : 3 cryotos Btc/Eth/Sol and 3 currencies USD/T/C
+	triangular: finds the best profitable opportunities (min>=0.5%) between unlimited pairs/currencies NOT exchanges. basically does what manager/conversion.py does, but for profit!
+4. hex arch is not fully implemented. adapters/exchanges need to be redone missing confirmation/rejection messages and in code instructions.
+
+PROBLEMS BELOW FIXED on 1/20/26 by kimi k2
+------------
+
 Project Goal & Hexagonal Refactor Instructions”). This captures exactly what we are trying to achieve, stays 100% faithful to your original strategy (no deviations), and gives any future AI the precise context to continue helping you.
 ## Project Goal & Hexagonal Refactor Instructions
 
@@ -224,6 +235,3 @@ Summary: Prioritized Tweaks to Implement (Keep Strategy 100% Intact)
 6. Coinbase & kraken have their own python libraries.
 
 Hexagonal  Archtecture: (recommended)
-
-
-Note: Don’t write code unless I ask you to. I make all executive decisions.
