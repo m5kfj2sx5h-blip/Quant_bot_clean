@@ -1,8 +1,8 @@
 # !/usr/bin/env python3
 """
 RISK MANAGER, HEALTH MONITOR & PERFORMANCE TELEMETRY SYSTEM
-Version: 3.0.1 | Component: System Health & Optimization
-Author: |\/||| | Last Updated: 2026-01-22 23:50
+Version: 3.0.2 | Component: System Health & Optimization
+Author: |\/||| | Last Updated: 2026-01-22 00:12
 
 Features:
 - Real-time performance metrics collection
@@ -33,6 +33,28 @@ from domain.aggregates import ExchangeHealth, Portfolio
 from domain.entities import TradingThresholds
 
 logger = logging.getLogger(__name__)
+
+class HealthStatus(Enum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    CRITICAL = "critical"
+
+
+class AlertLevel(Enum):
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
+
+
+@dataclass
+class Alert:
+    level: AlertLevel
+    message: str
+    timestamp: float
+    source: str = ""
+    data: Dict[str, Any] = field(default_factory=dict)
+
 
 
 class HealthMonitor:
@@ -147,30 +169,6 @@ class RiskLimiter:
 
         return True, "OK"
 
-
-
-
-
-class HealthStatus(Enum):
-    HEALTHY = "healthy"
-    DEGRADED = "degraded"
-    CRITICAL = "critical"
-
-
-class AlertLevel(Enum):
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-    CRITICAL = "critical"
-
-
-@dataclass
-class Alert:
-    level: AlertLevel
-    message: str
-    timestamp: float
-    source: str = ""
-    data: Dict[str, Any] = field(default_factory=dict)
 
 
 class HealthMonitor:
