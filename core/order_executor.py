@@ -119,7 +119,7 @@ class OrderExecutor:
 
         actual_buy_price = buy_result['price']
         actual_buy_amount = buy_result['amount']
-        buy_fee = buy_result.get('fee', 0.0)
+        buy_fee = buy_result.get('fee', Decimal('0'))
 
         # Execute sell order
         self.logger.info(f"💰 Selling {actual_buy_amount:.6f} {base_currency} on {sell_exchange}")
@@ -143,15 +143,17 @@ class OrderExecutor:
             return False
 
         actual_sell_price = sell_result['price']
-        sell_fee = sell_result.get('fee', 0.0)
+        sell_fee = sell_result.get('fee', Decimal('0'))
 
         # Use new Decimal-based function
         net_profit = calculate_net_profit(
             buy_price=Decimal(str(actual_buy_price)),
             sell_price=Decimal(str(actual_sell_price)),
             amount=Decimal(str(actual_buy_amount)),
-            fee_buy=Decimal(str(buy_fee / (actual_buy_price * actual_buy_amount))),  # approximate rate
-            fee_sell=Decimal(str(sell_fee / (actual_sell_price * actual_buy_amount))),
+            fee_buy_rate=buy_fee / (actual_buy_price * actual_buy_amount)  # Decimal op
+            fee_sell_rate=sell_fee / (actual_sell_price * actual_buy_amount)
+            fee_buy=Decimal(str(fee_buy_rate)),
+            fee_sell=Decimal(str(fee_sell_rate)),
             slippage=estimate_slippage(order_book, Decimal(str(actual_buy_amount))),  # add if you have order_book
             transfer_cost=Decimal('0')  # add if applicable
         )
@@ -159,18 +161,18 @@ class OrderExecutor:
         # Record trade execution
         execution_time = time.time() - start_time
         trade_record = {
-            'timestamp': time.time(),
+            'timestamp': datetime.utcnow(),
             'buy_exchange': buy_exchange,
             'sell_exchange': sell_exchange,
             'symbol': symbol,
-            'buy_price': actual_buy_price,
-            'sell_price': actual_sell_price,
-            'amount': actual_buy_amount,
-            'gross_profit': gross_profit,
-            'fees': total_fees,
-            'net_profit': net_profit,
-            'expected_profit': expected_profit,
-            'execution_time': execution_time,
+            'buy_price': Decimal(str(actual_buy_price)),
+            'sell_price': Decimal(str(actual_sell_price)),
+            'amount': Decimal(str(actual_buy_amount)),
+            'gross_profit': Decimal(str(gross_profit)),
+            'fees': Decimal(str(total_fees)),
+            'net_profit': Decimal(str(net_profit)),
+            'expected_profit': Decimal(str(expected_profit)),
+            'execution_time': execution_time
             'capital_mode': capital_mode,
             'position_size_usd': dynamic_position_size,
             'success': True
@@ -257,10 +259,11 @@ class OrderExecutor:
         }
         return min_amount_map.get(currency, Decimal('0.01'))
 
+
     def _validate_execution_params(self, buy_exchange: str, sell_exchange: str,
-                                   buy_price: float, sell_price: float,
-                                   symbol: str, amount: float,
-                                   expected_profit: float) -> bool:
+                                   buy_price: Decimal, sell_price: Decimal,
+                                   symbol: str, amount: Decimal,
+                                   expected_profit: Decimal) -> bool:
         """Validate all execution parameters before proceeding."""
         if buy_price <= 0 or sell_price <= 0:
             self.logger.error(f"❌ Invalid prices: buy=${buy_price:.2f}, sell=${sell_price:.2f}")
@@ -346,7 +349,7 @@ class OrderExecutor:
                 else:
                     # Simulate market order execution
                     execution_price = price_limit
-                    fee_rate = 0.002  # 0.2% taker fee
+                    fee_rate = Decimal('0.002')  # 0.2% taker fee
 
                 fee = amount * execution_price * fee_rate
 
