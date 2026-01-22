@@ -73,7 +73,7 @@ class OrderExecutor:
             trade_params = {}
 
         capital_mode = trade_params.get('capital_mode', 'BALANCED')
-        dynamic_position_size = trade_params.get('dynamic_position_size', position_size)
+        dynamic_position_size = Decimal(str(trade_params.get('dynamic_position_size', position_size)))
 
         # Log dynamic sizing information
         self.logger.info(
@@ -97,9 +97,10 @@ class OrderExecutor:
             return False
 
         # Calculate acceptable price ranges with slippage tolerance
-        max_buy_price = buy_price * (1 + self.settings['max_slippage_percent'] / 100)
-        min_sell_price = sell_price * (1 - self.settings['max_slippage_percent'] / 100)
-
+        max_buy_price = buy_price * (
+                    Decimal('1') + Decimal(str(self.settings['max_slippage_percent'])) / Decimal('100'))
+        min_sell_price = sell_price * (
+                    Decimal('1') - Decimal(str(self.settings['max_slippage_percent'])) / Decimal('100'))
         # Execute buy order
         self.logger.info(f"🛒 Buying {asset_amount:.6f} {base_currency} on {buy_exchange}")
         buy_result = self._execute_order(
@@ -144,11 +145,6 @@ class OrderExecutor:
         actual_sell_price = sell_result['price']
         sell_fee = sell_result.get('fee', 0.0)
 
-        # Calculate actual profit/loss              #replaced by core/profit.py
-  #      gross_profit = (actual_sell_price - actual_buy_price) * actual_buy_amount
-  #      total_fees = buy_fee + sell_fee
-  #      net_profit = gross_profit - total_fees
-
         # Use new Decimal-based function
         net_profit = calculate_net_profit(
             buy_price=Decimal(str(actual_buy_price)),
@@ -185,10 +181,10 @@ class OrderExecutor:
         self.successful_trades += 1
 
         if net_profit > 0:
-            self.total_profit += net_profit
+            self.total_profit += Decimal(str(net_profit))
             profit_status = "PROFIT"
         else:
-            self.total_loss += abs(net_profit)
+            self.total_loss += abs(Decimal(str(net_profit)))
             profit_status = "LOSS"
 
         # Add to history
@@ -218,8 +214,8 @@ class OrderExecutor:
 
         return True
 
-    def _calculate_asset_amount(self, position_size_usd: float,
-                                price: float, base_currency: str) -> float:
+    def _calculate_asset_amount(self, position_size_usd: Decimal,
+                                price: Decimal, base_currency: str) -> Decimal:
         """Calculate asset amount from USD position size."""
         if price <= 0:
             self.logger.error(f"❌ Invalid price for amount calculation: {price}")
@@ -230,7 +226,7 @@ class OrderExecutor:
         # Apply exchange-specific precision rules
         precision = self._get_amount_precision(base_currency)
         if precision > 0:
-            amount = round(amount, precision)
+            amount = amount.quantize(Decimal('1') * 10 ** -precision, rounding=ROUND_DOWN)
 
         # Ensure minimum amount
         min_amount = self._get_minimum_amount(base_currency)
@@ -251,16 +247,15 @@ class OrderExecutor:
         }
         return precision_map.get(currency, 8)
 
-    def _get_minimum_amount(self, currency: str) -> float:
-        """Get minimum trade amount for currency."""
+    def _get_minimum_amount(self, currency: str) -> Decimal:
         min_amount_map = {
-            'BTC': 0.0001,
-            'ETH': 0.001,
-            'USDT': 10.0,
-            'USDC': 10.0,
-            'USD': 10.0
+            'BTC': Decimal('0.0001'),
+            'ETH': Decimal('0.001'),
+            'USDT': Decimal('10.0'),
+            'USDC': Decimal('10.0'),
+            'USD': Decimal('10.0')
         }
-        return min_amount_map.get(currency, 0.01)
+        return min_amount_map.get(currency, Decimal('0.01'))
 
     def _validate_execution_params(self, buy_exchange: str, sell_exchange: str,
                                    buy_price: float, sell_price: float,
@@ -290,7 +285,7 @@ class OrderExecutor:
         return True
 
     def _execute_order(self, exchange_id: str, symbol: str, side: str,
-                       amount: float, price_limit: float,
+                       amount: Decimal, price_limit: Decimal,
                        order_type: str = 'limit') -> Dict:
         """
         Execute a single order with retry logic.
@@ -307,8 +302,8 @@ class OrderExecutor:
                 # For now, simulate execution
                 if order_type == 'limit':
                     # Simulate limit order execution
-                    execution_price = price_limit * (0.999 if side == 'buy' else 1.001)
-                    fee_rate = 0.001  # 0.1% taker fee
+                    execution_price = price_limit * Decimal('0.999' if side == 'buy' else '1.001')
+                    fee_rate = Decimal('0.001')  # 0.1% taker fee
                 else:
                     # Simulate market order execution
                     execution_price = price_limit
