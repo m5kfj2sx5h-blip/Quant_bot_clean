@@ -233,7 +233,7 @@ class OrderExecutor:
         # Ensure minimum amount
         min_amount = self._get_minimum_amount(base_currency)
         if amount < min_amount:
-            self.logger.warning(f"⚠️  Amount {amount} below minimum {min_amount}, adjusting")
+            self.logger.warning(f"⚠️ Amount {amount} below minimum {min_amount}, adjusting")
             amount = min_amount
 
         return amount
