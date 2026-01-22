@@ -1,7 +1,7 @@
 # !/usr/bin/env python3
 """
 RISK MANAGER, HEALTH MONITOR & PERFORMANCE TELEMETRY SYSTEM
-Version: 3.0.2 | Component: System Health & Optimization
+Version: 3.0.3 | Component: System Health & Optimization
 Author: |\/||| | Last Updated: 2026-01-22 00:12
 
 Features:
@@ -26,8 +26,8 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Callable, List, Any, Optional
-import os
 from decimal import Decimal
+import os
 
 from domain.aggregates import ExchangeHealth, Portfolio
 from domain.entities import TradingThresholds
@@ -81,26 +81,25 @@ class RiskLimiter:
         return True, "OK"
 
 
-
 class HealthMonitor:
     """
     Monitors overall system health including exchanges, network, and resources.
     Provides adaptive recommendations for optimization.
     """
 
-    def __init__(self, config, logger=None):
+    def __init__(self, portfolio: Portfolio, alert_callback: Callable, config, logger=None):
         """Initialize health monitor with configuration."""
+        self.portfolio = portfolio
+        self.alert_callback = alert_callback
+        self.exchange_health: Dict[str, ExchangeHealth] = {}
+        self.thresholds = TradingThresholds()
+        self._stop_event = asyncio.Event()
+        self._check_interval = 30  # seconds
         self.config = self._load_config(config)
         self.logger = logger or self._setup_monitoring_logger()
         self.start_time = time.time()
 
         # Initialize monitoring state with proper data structures
-        self.exchange_health: Dict[str, ExchangeHealth] = {}
-        self.thresholds = TradingThresholds()
-        self._stop_event = asyncio.Event()
-        self.latency_mode = os.getenv('LATENCY_MODE', 'laptop').lower()
-        self._check_interval = 30 if self.latency_mode == 'laptop' else 10  # Slower for laptop
-        self.logger.info(f"Latency mode: {self.latency_mode.upper()} (interval: {self._check_interval}s)")
         self.api_errors = defaultdict(deque)
         self.api_successes = defaultdict(deque)
         self.latency_metrics = defaultdict(deque)
@@ -126,11 +125,12 @@ class HealthMonitor:
             'performance_sample_size': 100,
             'telemetry_enabled': True
         }
-
         # Merge with provided config
         self.monitoring_config = self._merge_configs(self.config)
+        self.latency_mode = os.getenv('LATENCY_MODE', 'laptop').lower()
+        self.mode = "high_latency" if self.latency_mode == 'laptop' else "low_latency"  # Map to existing mode
         self.logger.info(
-            f"✅ Health Monitor initialized (window_size={self.monitoring_config['performance_sample_size']})")
+            f"✅ Health Monitor initialized (window_size={self.monitoring_config['performance_sample_size']}, latency mode={self.mode})")
 
     def _load_config(self, config):
         """Load the health monitoring configuration from a file or dict."""
@@ -165,14 +165,13 @@ class HealthMonitor:
             logger.setLevel(logging.INFO)
         return logger
 
-    def adjust_cycle_time(self, current_cycle_time: float) -> float:
-        """Dynamically adjust cycle time based on performance and latency mode."""
+    def adjust_cycle_time(self, current_cycle_time: float, mode: str) -> float:
+        """Dynamically adjust cycle time based on performance."""
         self.cycle_times.append(current_cycle_time)
         if len(self.cycle_times) > self.monitoring_config['performance_sample_size']:
             self.cycle_times.popleft()
 
-        mode = self.latency_mode
-        return self._calculate_adaptive_sleep(current_cycle_time, mode)
+        return self._calculate_adaptive_sleep(current_cycle_time, self.mode)
 
     def _calculate_adaptive_sleep(self, current_cycle_time: float, mode: str) -> float:
         """Calculate adaptive sleep time based on current performance."""
@@ -239,6 +238,12 @@ class HealthMonitor:
             'memory_mb': psutil.Process().memory_info().rss / 1024 / 1024,
             'active_exchanges': len(self.api_successes)
         })
+        latest = self.resource_usage[-1]
+        cpu_threshold = 90 if self.mode == 'high_latency' else 70  # Tolerant for high
+        if latest['cpu_percent'] > cpu_threshold:
+            self.active_alerts.append(
+                Alert(AlertLevel.WARNING, f"⚠️ High CPU usage: {latest['cpu_percent']}% (threshold {cpu_threshold}%)",
+                      time.time(), 'resource'))
 
     def _calculate_error_rate(self, exchange_id: str) -> float:
         """Calculate error rate for an exchange."""
@@ -544,6 +549,8 @@ if __name__ == "__main__":
     # Generate report
     report = monitor.generate_report()
     print(json.dumps(report, indent=2))
+
+
 
 
 """

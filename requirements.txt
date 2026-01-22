@@ -30,3 +30,4 @@ asyncio>=3.4.3
 binance-connector-python
 coinbase-advanced-py
 python-kraken-sdk
+psutil
