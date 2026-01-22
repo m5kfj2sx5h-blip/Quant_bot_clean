@@ -1,5 +1,4 @@
 {
-{
   "capital": {
     "total_usd": 10000,
     "qbot_pct": {
@@ -18,7 +17,13 @@
   "risk": {
     "max_trade_usd": 500,
     "min_spread_pct": 0.08,
-    "max_daily_paxg_withdraw_usd": 5000
+    "max_slip_pct": 0.02,
+    "max_daily_paxg_withdraw_usd": 5000,
+    "silent_fail_retry": 3
+  },
+  "auction": {
+    "micro_timing_threshold": 0.7,
+    "limit_chase": true
   },
   "staking": {
     "slots": 6,
@@ -47,25 +52,4 @@
       "usdc_apr": 3.5
     }
   }
-}
-{
-  "capital": {
-    …
-  same
-  …
-},
-"risk": {
-"max_trade_usd": 500,
-"min_spread_pct": 0.08,
-"max_slip_pct": 0.02,
-"max_daily_paxg_withdraw_usd": 5000,
-"silent_fail_retry": 3
-},
-"auction": {
-"micro_timing_threshold": 0.7,
-"limit_chase": true
-},
-"staking": {…same…},
-"exchanges": {…same…}
-}
 }
