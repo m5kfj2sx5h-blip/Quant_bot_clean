@@ -9,6 +9,7 @@ import signal
 import sys
 import time
 import traceback
+from decimal import Decimal
 from datetime import datetime
 from typing import Dict, Any
 from concurrent.futures import ThreadPoolExecutor   # <----What is this?? Spot only! no futures!
@@ -93,6 +94,28 @@ async def main():
     # Initialize system coordinator
     system = SystemCoordinator()
     await system.initialize()
+
+    # Mode Detection (Laptop/VPS from .env)
+    latency_mode = os.getenv('LATENCY_MODE', 'laptop').lower()
+    logger.critical(f"Detected latency mode: {latency_mode.upper()}")
+
+    # Mode-Specific Adjustments (FUNCTION/PROFIT/FEES)
+    if latency_mode == 'laptop':
+        system.settings = {  # Reuse/add to SystemCoordinator dict
+            'cycle_delay': 5.0,  # Slower for high latency tolerance
+            'timeout_seconds': 10,  # Longer timeouts to avoid blocks
+            'min_profit_threshold': Decimal('0.6'),  # Wider for safety (Decimal enforce)
+            'max_retries': 5,  # More retries for delays
+            'min_position_size_usd': Decimal('1000.0')  # Larger trades to reduce fee impact
+        }
+    else:  # VPS
+        system.settings = {
+            'cycle_delay': 1.0,  # Faster polling
+            'timeout_seconds': 1,  # Short timeouts for speed
+            'min_profit_threshold': Decimal('0.4'),  # Tighter for more ops
+            'max_retries': 2,  # Fewer, faster fails
+            'min_position_size_usd': Decimal('500.0')  # Smaller for quick profits
+        }
 
     # Create bots
     q_bot = QBot(system)
