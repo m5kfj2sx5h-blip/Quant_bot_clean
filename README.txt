@@ -1,3 +1,9 @@
+update 1/22
+need to rebuild focusing on FUNCTION : PROFITS : FEES
+need to adapt and work well in both HIGH and LOW latencies without abusing webskt/REST thresholds
+need to seperate/check time sensitive actions & non-critical functions
+
+
 UPDATE 1/21/26:
 1. Check exchangewrappers.py : coinbase advanced need attention? refer to env.TEMPLATE
 2. Why am i only seeing buy/sell in USD only?? Why arent we using USDT,USDC and USDT IF AVAILABLE? what ifbwr eun out of USD and all we have left is USDC?
@@ -178,53 +184,92 @@ Overall Strategy Notes (Cost-Reduction Emphasis, needs to be finalized)
 * Never use Ethereum (ERC-20) for transfers under $10k—fees often $0.87-5+ (volatile with congestion), times 5-15+ minutes. Avoid Avalanche unless specifically <$1 confirmed.
 
 QUANT_bot_clean/ #needs to be organized by pure function/job, hexagonal architecture 
-├── main.py                      
-├── system_orchestrator.py     	 # the main.py for arbitrage engine
+QUANT_bot_clean/ #needs to be organized by pure function/job, hexagonal architecture
+
+├── main.py                       #work in progress!
+    ├── system_orchestrator.py     # copied and pasted into main.py and deleted
 │
-├── config/                    			 # all settings
-│   ├── bot_config.json
-│   ├── settings.json
-│   └── .env                   			 # env.txt clone of .env with keys censored
+├── config/                    	 # copied from Quant bot 3 manually!
+│   ├── coins.json
+│   ├── settings.json              # we just edited and pushed
+│   └── .env                   	 # added  LATENCY_MODE='laptop'
 │
-├── core/                       
-│   ├── **data_feed.py*				# WebSocket data acquisition + so much more! 		*(now = adapters/data/feed.py)
-│   ├── **market_context.py			# risk manager AND arb analyzer!! 					*(now = manager/scanner.py)*
-│   ├── **auction_context.py		# limit-chaser & auction-theory logic 				*(now = core/auction.py)
-│   └── order_executor.py			# adv order executor w/ intel routing & risk mgt
-├── bot/                      
+│
+│
+├── adapters/
+│   ├── data
+│   │   ├── feed.py				# used to be data_feed.py
+│   │   └── ws.py                	# PAXG hedging & accumulation
+│   │
+│   └─── persistance.             ** new empty folder!!
+│   │
+│   └─── exchanges
+│       ├── base.py               # *new needs everything remaining from exchange wrappers!
+│       ├── binanceus.py          # *new taken from exchange wrappers
+│       ├── coinbase_advanced.py  # *new taken from exchange wrappers (missing PEM?)
+│       ├── coinbase.py           # *new taken from exchange wrappers
+│       └── kraken.py.  			# *new taken from exchange wrappers
+│
+├── bot/
 │   ├── Q.py						# arbitrage (cross + triangular)
 │   ├── A.py				        # buy/sell + staking/unstaking
 │   └── G.py                		# PAXG hedging & accumulation
-├── manager/                   
-│   ├── mode_manager.py				# remembers mode & announces, de/activates bots  	*(now = /mode.py)
-│   ├── money_manager.py        	# prevents capital stagnation, divides capital 		*(now = /money.py)
-│   ├── converison_manager.py   	# prevents capital drift, minimizes transfers. 		*(now = /conversion.py)
-│   ├── transfer_manager.py			# Keeps average transfer cost per rebalance <$1		*(now = /transfer.py)
-│   ├── market_scanner.py			# notifies QBot of danger or opportunity in price.	*(now = /scanner (as above))
-│   ├── websocket_manager.py		# currently we have 2 ex_wrappers & ex_wsockets		*(now = adapters/data/ws.py)
-│   ├── signal_receiver.py	 		# macro & A-bot’s buy/sell signals frm TradingView	*(now = /signals.py)
-│   ├── fee_manager.py	 			# tracks all fees & zero fee allowances per account	*(now = /fee.py)
-│   ├── staking_manager.py																*(now = /staking.py)
-│   └── health_monitor.py			# measures performance & detects silent failures
 │
-├── dashboard.py             		# my visual window (keep this!)
-├-- mini_dashboard.py				# a mini version of dashboard  						*(now = minidash.py)
 │
-├── utils/                    		# shared helpers (logging, etc.)
-│   ├── config.py					# not used
-│   ├── helpers.py					# not used
-│   ├── logger.py					logger.py
-│   └── utils.py
-├── logs/							# output files
+├── core/
+│   ├── analysis.py           # *new "Analyzes trading performance without blocking"
+│   ├── auction.py            # was auction_context_module.py
+│   ├── health_monitor.py     # also measures performance & detects silent failures
+│   ├── order_executor.py     # adv order executor w/ intel routing & risk mgt
+│   ├── profit.py             # *new
+│   ├── risk.py               # *new Risk management and health monitoring....
+│   └── thresholds.py			# *new
+│
+│
+├── domain/                   # *new
+│   ├── aggregates.py			# *new
+│   ├── entities.py			# *new
+│   └── values.py				# *new
+│
+│
+├── logs/						# i manually copied this from an older project (not connected)
 │   ├── errors/
 │   ├── performance/
 │   └── trades/
-├── tests/
-│   ├── component_testing/
-│   └── backtesting/
+├── manager/
+│   ├── fee.py	 		       # tracks all fees & zero fee allowances per account
+│   ├── mode.py         	   # remembers mode & announces, de/activates bots
+│   ├── money.py               # prevents capital stagnation, divides capital
+│   ├── converison.py          # prevents capital drift, minimizes transfers.
+│   ├── transfer.py        	   # Keeps average transfer cost per rebalance <$1
+│   ├── scanner.py      	   # notifies QBot of danger or opportunity in price.
+│   ├── websocket_manager.py   # (now = adapters/data/ws.py)
+│   ├── signals.py	 	       # macro & A-bot’s buy/sell signals frm TradingView
+│   └──  staking.py
 │
-└── state/                      # .json files that remember things
-
+│
+├── dashboard.py             		# my visual window (keep this!)
+├-- mini_dashboard.py	     		# a mini version of dashboard *(now = minidash.py)
+├-- * exchange_wrappers.py			* still needs to be removed!
+│
+│
+├── utils/                    	# this file was also maunally transplanted from elsewhere
+│   ├── config.py			    # ANOTHER config!!
+│   ├── helpers.py			    # not used
+│   ├── logger.py				# dont know if used or connected correctly
+│   └── utils.py                # refactored to here.
+│
+├── ports/						# new empty folder!!
+│   ├── inbound/                # new empty folder!!
+│   └──  outbound/              # new empty folder!!
+│
+├── services/                   # new empty folder!!
+│
+├── tests/                        #undone!
+│   ├── component_testing/        #undone!
+│   └── backtesting/              #undone!
+│
+└── state/                        #undone!
 
 Summary: Prioritized Tweaks to Implement (Keep Strategy 100% Intact)
 1. Set baseline threshold to 0.5% net (add to calculate_net_profit or config).
@@ -233,5 +278,3 @@ Summary: Prioritized Tweaks to Implement (Keep Strategy 100% Intact)
 4. Volatility slowdown (double cycle time on high range).
 5. Reinforce WebSocket-only for prices/books + short cache
 6. Coinbase & kraken have their own python libraries.
-
-Hexagonal  Archtecture: (recommended)

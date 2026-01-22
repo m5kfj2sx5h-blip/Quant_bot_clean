@@ -2,17 +2,30 @@
 Main orchestration - Q-Bot gets dedicated thread, never blocked
 """
 import asyncio
+import json
 import logging
+import os
 import signal
 import sys
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
+import time
+import traceback
+from datetime import datetime
+from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor   # <----What is this?? Spot only! no futures!
+from dotenv import load_dotenv  # Load environment variables
 
-from system import SystemCoordinator
+load_dotenv()
+
+# Import components
+from adapters.data.feed import DataFeed
+from manager.scanner import MarketContext, ArbitrageAnalyzer
+from core.order_executor import OrderExecutor
+from core.health_monitor import HealthMonitor
+from exchange_wrappers import ExchangeWrapperFactory
 from bots.Q import QBot
 from bots.A import ABot
 from bots.G import GBot
-from core.health_monitor import HealthMonitor
+
 
 # Configure logging BEFORE anything else
 logging.basicConfig(
@@ -118,35 +131,14 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Main loop error: {e}", exc_info=True)
         sys.exit(1)
+
+
 # !/usr/bin/env python3
 """
 PROFESSIONAL ARBITRAGE TRADING SYSTEM - MAIN ORCHESTRATOR
 Version: 2.0.0
 Description: Core orchestration manager for multi-exchange arbitrage trading system
 """
-
-import json
-import logging
-import os
-import signal
-import sys
-import time
-import traceback
-from datetime import datetime
-from typing import Dict, Any
-
-# Load environment variables
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Import components
-from adapters.data.feed import DataFeed
-from manager.scanner import MarketContext, ArbitrageAnalyzer
-from core.order_executor import OrderExecutor
-from manager.health_monitor import HealthMonitor
-from exchange_wrappers import ExchangeWrapperFactory
-
 
 class SystemOrchestrator:
     """Main orchestrator for the multi-exchange arbitrage bot."""
