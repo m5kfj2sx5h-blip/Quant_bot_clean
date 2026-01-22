@@ -284,6 +284,45 @@ class OrderExecutor:
 
         return True
 
+    def _hedge_position(self, original_buy_exchange: str, failed_sell_exchange: str,
+                        symbol: str, amount: Decimal, buy_price: Decimal) -> bool:
+        """Hedge a position when one leg fails."""
+        self.logger.warning(
+            f"Hedging position: {amount.quantize(Decimal('0.000000'))} {symbol} at ${buy_price.quantize(Decimal('0.00'))}")
+
+        # Find alternative exchange for hedging
+        # In production, this would query available exchanges
+        alternative_exchanges = ['KRAKEN', 'BINANCE', 'COINBASE']
+        alternative_exchanges.remove(original_buy_exchange)
+        if failed_sell_exchange in alternative_exchanges:
+            alternative_exchanges.remove(failed_sell_exchange)
+
+        if not alternative_exchanges:
+            self.logger.error("❌ No alternative exchanges available for hedging")
+            return False
+
+        hedge_exchange = alternative_exchanges[0]
+
+        # Execute hedge (sell at market to minimize further loss)
+        self.logger.info(f"🛡️  Hedging on {hedge_exchange} at market price")
+        hedge_result = self._execute_order(
+            exchange_id=hedge_exchange,
+            symbol=symbol,
+            side='sell',
+            amount=amount,
+            price_limit=buy_price * 0.95,  # Accept 5% loss to exit
+            order_type='market'
+        )
+
+        if hedge_result['success']:
+            hedge_price = hedge_result['price']
+            hedge_loss = (buy_price - hedge_price) * amount
+            self.logger.warning(f"⚠️  Position hedged with loss: ${hedge_loss:.2f}")
+            return True
+        else:
+            self.logger.error(f"❌ Hedge failed: {hedge_result.get('error')}")
+            return False
+
     def _execute_order(self, exchange_id: str, symbol: str, side: str,
                        amount: Decimal, price_limit: Decimal,
                        order_type: str = 'limit') -> Dict:
@@ -338,44 +377,6 @@ class OrderExecutor:
                     }
 
         return {'success': False, 'error': 'Max retries exceeded'}
-
-    def _hedge_position(self, original_buy_exchange: str, failed_sell_exchange: str,
-                        symbol: str, amount: float, buy_price: float) -> bool:
-        """Hedge a position when one leg fails."""
-        self.logger.warning(f"⚠️  Hedging position: {amount} {symbol} at ${buy_price:.2f}")
-
-        # Find alternative exchange for hedging
-        # In production, this would query available exchanges
-        alternative_exchanges = ['KRAKEN', 'BINANCE', 'COINBASE']
-        alternative_exchanges.remove(original_buy_exchange)
-        if failed_sell_exchange in alternative_exchanges:
-            alternative_exchanges.remove(failed_sell_exchange)
-
-        if not alternative_exchanges:
-            self.logger.error("❌ No alternative exchanges available for hedging")
-            return False
-
-        hedge_exchange = alternative_exchanges[0]
-
-        # Execute hedge (sell at market to minimize further loss)
-        self.logger.info(f"🛡️  Hedging on {hedge_exchange} at market price")
-        hedge_result = self._execute_order(
-            exchange_id=hedge_exchange,
-            symbol=symbol,
-            side='sell',
-            amount=amount,
-            price_limit=buy_price * 0.95,  # Accept 5% loss to exit
-            order_type='market'
-        )
-
-        if hedge_result['success']:
-            hedge_price = hedge_result['price']
-            hedge_loss = (buy_price - hedge_price) * amount
-            self.logger.warning(f"⚠️  Position hedged with loss: ${hedge_loss:.2f}")
-            return True
-        else:
-            self.logger.error(f"❌ Hedge failed: {hedge_result.get('error')}")
-            return False
 
     def get_performance_metrics(self) -> Dict:
         """Get execution performance metrics."""
