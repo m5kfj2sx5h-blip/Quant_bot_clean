@@ -19,13 +19,12 @@ class PerformanceAnalyzer:
         self.trades: List[Dict] = []
         self.last_update = datetime.min
 
-    def record_trade(self, symbol: str, profit_usd: Decimal, duration_seconds: float,
-                     exchange_pair: str):
+    def record_trade(self, exchange_pair: str, profit_usd: Decimal, duration_seconds: float):
         """Record a completed arbitrage trade"""
         self.trades.append({
             'timestamp': datetime.utcnow(),
             'symbol': symbol,
-            'profit_usd': float(profit_usd),
+            'profit_usd': Decimal(str(profit_usd)),
             'duration_seconds': duration_seconds,
             'exchange_pair': exchange_pair,
         })
@@ -68,8 +67,8 @@ class PerformanceAnalyzer:
     def _empty_stats(self) -> Dict[str, Any]:
         return {
             'total_trades': 0,
-            'total_profit_usd': 0.0,
-            'avg_profit_per_trade': 0.0,
+            'total_profit': Decimal('0.0'),
+            'avg_profit_per_trade': Decimal('0.0'),
             'win_rate': 0.0,
             'avg_duration_seconds': 0.0,
             'best_trade': 0.0,
@@ -77,4 +76,5 @@ class PerformanceAnalyzer:
             'sharpe_ratio': 0.0,
             'last_24h_trades': 0,
             'last_24h_profit': 0.0,
+            'max_drawdown': Decimal('0.0'),
         }
