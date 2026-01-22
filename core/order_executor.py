@@ -150,8 +150,8 @@ class OrderExecutor:
             buy_price=Decimal(str(actual_buy_price)),
             sell_price=Decimal(str(actual_sell_price)),
             amount=Decimal(str(actual_buy_amount)),
-            fee_buy_rate=buy_fee / (actual_buy_price * actual_buy_amount)  # Decimal op
-            fee_sell_rate=sell_fee / (actual_sell_price * actual_buy_amount)
+            fee_buy_rate=buy_fee / (actual_buy_price * actual_buy_amount),
+            fee_sell_rate=sell_fee / (actual_sell_price * actual_buy_amount),
             fee_buy=Decimal(str(fee_buy_rate)),
             fee_sell=Decimal(str(fee_sell_rate)),
             slippage=estimate_slippage(order_book, Decimal(str(actual_buy_amount))),  # add if you have order_book
@@ -172,7 +172,7 @@ class OrderExecutor:
             'fees': Decimal(str(total_fees)),
             'net_profit': Decimal(str(net_profit)),
             'expected_profit': Decimal(str(expected_profit)),
-            'execution_time': execution_time
+            'execution_time': execution_time,
             'capital_mode': capital_mode,
             'position_size_usd': dynamic_position_size,
             'success': True

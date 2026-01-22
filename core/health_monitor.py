@@ -26,7 +26,7 @@ from enum import Enum
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Callable, List, Any, Optional,
+from typing import Dict, Callable, List, Any, Optional
 from decimal import Decimal
 
 from domain.aggregates import ExchangeHealth, Portfolio
