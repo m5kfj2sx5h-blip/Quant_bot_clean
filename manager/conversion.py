@@ -16,6 +16,9 @@ from decimal import Decimal
 import os
 from core.health_monitor import HealthMonitor  # For exchange latency
 from manager.transfer import TransferManager  # For fallback transfers
+from manager.scanner import MarketContext  # For current books
+from core.order_executor import OrderExecutor  # For executing route
+
 log = logging.getLogger('tri')
 
 PAIRS = ['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','BTC-USDG','ETH-USDG','SOL-USDG' 'ETH-BTC','SOL-BTC','SOL-ETH','BTC-PAXG','PAXG-ETH','SOL-PAXG','USD-USDT','USDT-USDC','USD-USDC','USD-USDG','USDG-USDT','USDG-USDC']  # Expanded for more routes
@@ -44,3 +47,43 @@ def detect_triangle(books, specified_pairs=None, exchanges=None, min_prof=Decima
                 continue
     # Sort by cheapest (prof desc), then fastest (latency asc)
     return sorted(out, key=lambda x: (-x['prof_pct'], x['latency_ms']))
+
+def control_drift(self, drift_data):
+    """Control drift via intra-triangular conversions to eliminate transfer fees."""
+    for asset, deviation in drift_data:
+        # Placeholder — integrate real books from scanner/feed later
+        scanner = MarketContext(config={}, logger=logging.getLogger(__name__))  # Init with config if needed
+        books = scanner.order_book_history  # Latest books from scanner
+        if not books:
+            self.logger.warning("No current books available for drift control")
+            return False
+
+        routes = self.detect_triangle(books)
+        if routes:
+            top = routes[0]
+            self.logger.info(f"Intra-triangular drift control for {asset}: {top['path']} prof {top['prof_pct']}%")
+            order_executor = OrderExecutor()  # Init if needed
+            path = top['path']  # e.g., ('USDT', 'BTC', 'ETH')
+            # Execute a->b->c spot trades (long only)
+            # Example: buy BTC with USDT, buy ETH with BTC, sell ETH for USDT
+            try:
+                # First leg: USDT -> BTC
+                order_executor.execute_arbitrage(buy_exchange=top['ex'], sell_exchange=top['ex'],
+                                                 symbol=f"{path[0]}{path[1]}", position_size=deviation,
+                                                 expected_profit=Decimal('0'))  # Simplified
+                # Second leg: BTC -> ETH
+                order_executor.execute_arbitrage(buy_exchange=top['ex'], sell_exchange=top['ex'],
+                                                 symbol=f"{path[1]}{path[2]}", position_size=deviation,
+                                                 expected_profit=Decimal('0'))
+                # Third leg: ETH -> USDT
+                order_executor.execute_arbitrage(buy_exchange=top['ex'], sell_exchange=top['ex'],
+                                                 symbol=f"{path[2]}{path[0]}", position_size=deviation,
+                                                 expected_profit=Decimal('0'))
+                self.logger.info(f"Executed intra-triangular route {path} on {top['ex']} for drift control")
+                return True
+            except Exception as e:
+                self.logger.error(f"Triangular execution failed: {e}")
+                return False
+
+            return True
+    return False
