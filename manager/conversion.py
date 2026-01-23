@@ -50,6 +50,20 @@ def detect_triangle(books, specified_pairs=None, exchanges=None, min_prof=Decima
 
 def control_drift(self, drift_data):
     """Control drift via intra-triangular conversions to eliminate transfer fees."""
+    # Drift control - prioritize intra-triangular to eliminate fees
+    drift_data = []
+    for asset, current in current_allocations.items():
+        target = self.MACRO_TARGET_ALLOCATIONS.get(asset, Decimal('0'))
+        deviation = abs(current - target)
+        if deviation >= Decimal('0.15'):  # 15% drift threshold for intra
+            drift_data.append((asset, deviation))
+
+    if drift_data:
+        if self.conversion_manager.control_drift(drift_data):
+            self.logger.info(f"Drift controlled via intra-triangular for {len(drift_data)} assets — no transfer fees")
+        else:
+            self.logger.warning(f"Drift >=15% for {len(drift_data)} assets — no intra route, manual transfer needed")
+
     for asset, deviation in drift_data:
         # Placeholder — integrate real books from scanner/feed later
         scanner = MarketContext(config={}, logger=logging.getLogger(__name__))  # Init with config if needed
@@ -83,7 +97,20 @@ def control_drift(self, drift_data):
                 return True
             except Exception as e:
                 self.logger.error(f"Triangular execution failed: {e}")
+
                 return False
 
+
             return True
+
+
     return False
+
+# Update capital mode after drift check
+max_deviation = max((dev for _, dev in drift_data), default=Decimal('0'))
+total_stable = sum(total_values.get(c, Decimal('0')) for c in ['USDT', 'USDC', 'USD'])
+if max_deviation >= Decimal('0.15') or total_stable < Decimal('1500'):
+    self.capital_mode = "bottlenecked"
+else:
+    self.capital_mode = "balanced"
+self.logger.info(f"Capital mode: {self.capital_mode} (max drift {max_deviation*100:.1f}%, stable ${total_stable:.0f})")
