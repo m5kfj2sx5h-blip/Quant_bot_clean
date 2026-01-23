@@ -2,7 +2,7 @@ import krakenex
 from decimal import Decimal
 from typing import Dict, List, Any, Optional
 from exchanges.base import ExchangeAdapter
-from domain.values import Price, Amount, Symbol
+from domain.values import Price, Amount, Symbol         #<------- NEEDS FIXING!
 
 class KrakenAdapter(ExchangeAdapter):
     def __init__(self, config: Dict[str, Any]):

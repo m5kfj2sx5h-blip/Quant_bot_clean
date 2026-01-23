@@ -2,25 +2,36 @@
 
 import logging
 import json
-import os
 from datetime import datetime
+from decimal import Decimal
+import os
+from manager.conversion import ConversionManager  # For fee-free triangular
+from manager.mode import ModeManager  # For GOLD/BTC allotment
 
 logger = logging.getLogger(__name__)
 
 class RebalanceMonitor:
+
     def __init__(self, config_path='config/rebalance_config.json'):
         self.config_path = config_path
         # TARGETS for MANUAL MACRO rebalancing (not for auto-trading)
         self.MACRO_TARGET_ALLOCATIONS = {
-            'BTC': 0.50,   # Ideal long-term portfolio split for manual review
-            'USDT': 0.25,
-            'USDC': 0.25
+            'BTC': Decimal('0.50'),  # Ideal long-term portfolio split for manual review
+            'USDT': Decimal('0.25'),
+            'USDC': Decimal('0.25')
         }
-        self.MACRO_TRIGGER_THRESHOLD = 0.10  # 10% deviation triggers a macro review suggestion
-        self.MIN_MACRO_TRANSFER_VALUE = 500.0  # Don't suggest manual transfers under $500
+        self.MACRO_TRIGGER_THRESHOLD = Decimal('0.10')  # 10% deviation triggers a macro review suggestion
+        self.MIN_MACRO_TRANSFER_VALUE = Decimal('500.0')  # Don't suggest manual transfers under $500
         self.last_macro_analysis = None
+        self.mode_manager = ModeManager()  # For GOLD/BTC mode
+        self.conversion_manager = ConversionManager()  # For fee-free triangular
+        self.latency_mode = os.getenv('LATENCY_MODE', 'laptop').lower()
+        self.drift_threshold = Decimal('0.15') if self.latency_mode == 'laptop' else Decimal(
+            '0.10')  # High: 15%, Low: 10%
+        self.capital_mode = "balanced"  # Default, update in check_drift
         self._load_config()
-        logger.info(f"⚖️ MACRO Rebalance Monitor Initialized. Suggests manual transfers >${self.MIN_MACRO_TRANSFER_VALUE:.0f}.")
+        logger.info(
+            f"⚖️ MACRO Rebalance Monitor Initialized. Suggests manual transfers >${self.MIN_MACRO_TRANSFER_VALUE:.0f}. Latency mode: {self.latency_mode.upper()}, Drift threshold: {self.drift_threshold * Decimal('100')}%")
 
     def _load_config(self):
         default_config = {
@@ -32,21 +43,26 @@ class RebalanceMonitor:
             if os.path.exists(self.config_path):
                 with open(self.config_path, 'r') as f:
                     loaded_config = json.load(f)
-                    self.MACRO_TARGET_ALLOCATIONS = loaded_config.get("macro_target_allocations", self.MACRO_TARGET_ALLOCATIONS)
-                    self.MACRO_TRIGGER_THRESHOLD = loaded_config.get("macro_trigger_threshold", self.MACRO_TRIGGER_THRESHOLD)
-                    self.MIN_MACRO_TRANSFER_VALUE = loaded_config.get("min_macro_transfer_value", self.MIN_MACRO_TRANSFER_VALUE)
+                    self.MACRO_TARGET_ALLOCATIONS = {k: Decimal(str(v)) for k, v in
+                                                     loaded_config.get("macro_target_allocations",
+                                                                       self.MACRO_TARGET_ALLOCATIONS).items()}
+                    self.MACRO_TRIGGER_THRESHOLD = Decimal(
+                        str(loaded_config.get("macro_trigger_threshold", self.MACRO_TRIGGER_THRESHOLD)))
+                    self.MIN_MACRO_TRANSFER_VALUE = Decimal(
+                        str(loaded_config.get("min_macro_transfer_value", self.MIN_MACRO_TRANSFER_VALUE)))
         except Exception as e:
-            logger.error(f"Failed to load macro config: {e}. Using defaults.")
+            logger.error(f"❌ Failed to load macro config: {e}. Using defaults.")
 
     def should_rebalance(self, exchange_wrappers, price_data):
-        """
-        [LEGACY FUNCTION - Called by old system_orchestrator logic.
-         Kept for compatibility but now returns False.
-         The new inventory logic is in system_orchestrator._check_inventory_needs]
-        """
+
+        #"""
+        #[LEGACY FUNCTION - Called by old system_orchestrator logic.
+        # Kept for compatibility but now returns False.
+        # The new inventory logic is in system_orchestrator._check_inventory_needs]
+        # """
         # This function is no longer used for triggering auto-rebalance.
         # It's kept to avoid breaking the orchestrator's call.
-        return False
+        return False        """THIS IS NO LONGER TRUE!! WHY???"""
 
     def generate_macro_plan(self, exchange_wrappers, price_data, min_btc_reserve, min_stable_reserve):
         """

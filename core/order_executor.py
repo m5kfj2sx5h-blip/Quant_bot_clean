@@ -6,13 +6,11 @@ Description: Advanced order execution with intelligent routing and risk manageme
 Author: Quantum Trading Systems
 """
 
-import asyncio
 import logging
 import time
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional
 from decimal import Decimal, ROUND_DOWN
 from core.profit import calculate_net_profit, estimate_slippage
-from exchange_wrappers import ExchangeWrapper
 
 
 class OrderExecutor:

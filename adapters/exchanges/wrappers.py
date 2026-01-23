@@ -1,22 +1,24 @@
-# File: exchange_wrappers.py
+# File: wrappers.py
 # Create this file in your QUANT_bot directory
 
 """
 Exchange Wrappers Module
 Provides unified interfaces for different cryptocurrency exchanges
 """
-
 import ccxt
+import logger
 import logging
-from typing import Dict, Optional, Any, List
-from abc import ABC, abstractmethod
-
-logger = logging.getLogger(__name__)
-
 import base64
 import re
-# from ecdsa import SigningKey, VerifyingKey
-# from ecdsa.util import sigencode_der
+from abc import ABC, abstractmethod
+from domain.values import Symbol, Amount, Price  #<<---- NEEDS FIXING!!
+from typing import Dict, Optional, Any
+from abc import ABC, abstractmethod
+from ecdsa import SigningKey, VerifyingKey
+from ecdsa.util import sigencode_der
+
+
+logger = logging.getLogger(__name__)
 
 
 class ExchangeWrapper(ABC):
@@ -165,18 +167,18 @@ class KrakenWrapper(ExchangeWrapper):
             return False
 
 
-class BinanceWrapper(ExchangeWrapper):
-    """Binance exchange wrapper"""
+class BinanceUSWrapper(ExchangeWrapper):
+    """BinanceUS exchange wrapper"""
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__('binance', config)
     
     def create_order(self, symbol: str, order_type: str, side: str, 
                     amount: float, price: Optional[float] = None) -> Dict[str, Any]:
-        """Create an order on Binance"""
+        """Create an order on BinanceUS"""
         try:
             if not self.connected or not self.exchange:
-                raise Exception("Not connected to Binance")
+                raise Exception("Not connected to BinanceUS")
             
             # Binance requires specific handling
             order_params = {}
@@ -196,28 +198,29 @@ class BinanceWrapper(ExchangeWrapper):
                 params=order_params
             )
             
-            self.logger.info(f"✅ Order created on Binance: {order['id']}")
+            self.logger.info(f"✅ Order created on BinanceUS: {order['id']}")
             return order
             
         except Exception as e:
-            self.logger.error(f"❌ Failed to create order on Binance: {e}")
+            self.logger.error(f"❌ Failed to create order on BinanceUS: {e}")
             raise
     
     def cancel_order(self, order_id: str, symbol: str) -> bool:
-        """Cancel an order on Binance"""
+        """Cancel an order on BinanceUS"""
         try:
             if not self.connected or not self.exchange:
                 return False
             
             self.exchange.cancel_order(order_id, symbol)
-            self.logger.info(f"✅ Order {order_id} cancelled on Binance")
+            self.logger.info(f"✅ Order {order_id} cancelled on BinanceUS")
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Failed to cancel order {order_id} on Binance: {e}")
+            self.logger.error(f"❌ Failed to cancel order {order_id} on BinanceUS: {e}")
             return False
 
-class CoinbaseAdvancedTradeWrapper:
+
+class CoinbaseAdvancedWrapper(ExchangeWrapper):
     @staticmethod
     def _parse_pem_key(pem_key: str) -> bytes:
         """
@@ -275,12 +278,12 @@ class CoinbaseAdvancedTradeWrapper:
         # Test authentication on init
         try:
             self.exchange.fetch_balance()
-            logger.info("Coinbase authentication successful")
+            logger.info("coinbaseadvanced authentication successful")
         except IndexError as e:
-            logger.error(f"Coinbase IndexError on init: {e}")
-            raise RuntimeError("Coinbase PEM key parsing failed - check your API secret format")
+            logger.error(f"coinbaseadvanced IndexError on init: {e}")
+            raise RuntimeError("coinbaseadvanced PEM key parsing failed - check your API secret format")
         except Exception as e:
-            logger.warning(f"Coinbase test call failed (may be sandbox): {e}")
+            logger.warning(f"coinbaseadvanced test call failed (may be sandbox): {e}")
 
 
 class CoinbaseWrapper(ExchangeWrapper):
@@ -342,12 +345,12 @@ class ExchangeWrapperFactory:
         
         if exchange_name == 'kraken':
             return KrakenWrapper(config)
-        elif exchange_name == 'binance':
-            return BinanceWrapper(config)
+        elif exchange_name == 'coinbaseadvanced':
+            return CoinbaseAdvancedWrapper(config)
         elif exchange_name == 'coinbase':
             return CoinbaseWrapper(config)
         elif exchange_name == 'binanceus':
-            return BinanceWrapper(config)  # Binance.US uses same wrapper
+            return BinanceUSWrapper(config)  # Binance.US uses same wrapper
         else:
             logger.error(f"Unsupported exchange: {exchange_name}")
             return None

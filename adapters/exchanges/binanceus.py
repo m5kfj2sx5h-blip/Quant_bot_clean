@@ -1,8 +1,9 @@
 import ccxt.async_support as ccxt
 from decimal import Decimal
 from typing import Dict, List, Any, Optional
-from exchanges.base import ExchangeAdapter
-from domain.values import Price, Amount, Symbol
+
+from exchanges.wrappers import ExchangeAdapter
+from domain.values import Price, Amount, Symbol         #<<---- NEEDS FIXING!!
 from binance.spot import Spot as BinanceSpot
 
 class BinanceUSAdapter(ExchangeAdapter):

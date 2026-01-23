@@ -22,7 +22,7 @@ from adapters.data.feed import DataFeed
 from manager.scanner import MarketContext, ArbitrageAnalyzer
 from core.order_executor import OrderExecutor
 from core.health_monitor import HealthMonitor
-from exchange_wrappers import ExchangeWrapperFactory
+from adapters.exchanges.wrappers import ExchangeWrapperFactory
 from bots.Q import QBot
 from bots.A import ABot
 from bots.G import GBot

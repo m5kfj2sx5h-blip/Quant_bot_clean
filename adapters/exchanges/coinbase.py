@@ -1,8 +1,9 @@
 import ccxt.async_support as ccxt
 from decimal import Decimal
 from typing import Dict, List, Any, Optional
+
 from exchanges.base import ExchangeAdapter
-from domain.values import Price, Amount, Symbol
+from domain.values import Price, Amount, Symbol     #<<---- NEEDS FIXING!!
 
 class CoinbaseRegularAdapter(ExchangeAdapter):
     def __init__(self, config: Dict[str, Any]):
