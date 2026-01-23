@@ -647,27 +647,27 @@ class ArbitrageAnalyzer:
         
         # Return top opportunities
         return [opp for _, opp in scored[:max_opportunities]]
-    
-    def _score_opportunity(self, opportunity: ArbitrageOpportunity) -> float:
+
+    def _score_opportunity(self, opportunity: ArbitrageOpportunity) -> Decimal:
         """Score an opportunity for ranking."""
-        score = 0.0
-        
+        score = Decimal('0.0')
+
         # Profit score (40%)
-        profit_score = min(opportunity.estimated_profit / 10, 1.0) * 40
+        profit_score = min(opportunity.estimated_profit / Decimal('10'), Decimal('1.0')) * Decimal('40')
         score += profit_score
-        
+
         # Confidence score (30%)
-        confidence_score = opportunity.confidence * 30
+        confidence_score = opportunity.confidence * Decimal('30')
         score += confidence_score
-        
+
         # Spread score (20%)
-        spread_score = min(opportunity.spread_percentage / 0.3, 1.0) * 20
+        spread_score = min(opportunity.spread_percentage / Decimal('0.3'), Decimal('1.0')) * Decimal('20')
         score += spread_score
-        
+
         # Capital mode bonus (10%)
         if opportunity.capital_mode == 'BALANCED':
-            score += 10  # Bonus for balanced mode
+            score += Decimal('10')  # Bonus for balanced mode
         elif opportunity.capital_mode == 'BOTTLENECKED':
-            score += 5   # Smaller bonus for bottleneck mode
-        
+            score += Decimal('5')  # Smaller bonus for bottleneck mode
+
         return score
