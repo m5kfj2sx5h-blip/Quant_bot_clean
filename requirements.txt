@@ -33,3 +33,4 @@ binance-connector-python
 coinbase-advanced-py
 python-kraken-sdk
 requests
+apscheduler

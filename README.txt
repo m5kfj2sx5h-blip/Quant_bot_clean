@@ -1,25 +1,4 @@
-PRIORITY update 1/22 21:00
->>>>>MUST UPDATE ENTIRE CODE TO USE DECIMALS FOR ANYTHING THAT HAS TO DO WITH MONEY!<<<<
-
-THIS STEP MUST BE DONE FIRST BEFORE MOVING FORWARD!
-
-
-update 1/22
-need to rebuild focusing on FUNCTION : PROFITS : FEES
-need to adapt and work well in both HIGH and LOW latencies without abusing webskt/REST thresholds
-need to seperate/check time sensitive actions & non-critical functions
-
-
-UPDATE 1/21/26:
-1. Check exchangewrappers.py : coinbase advanced need attention? refer to env.TEMPLATE
-2. Why am i only seeing buy/sell in USD only?? Why arent we using USDT,USDC and USDT IF AVAILABLE? what ifbwr eun out of USD and all we have left is USDC?
-3. arbitrage should be reviewed:
-	classic: straightforward, find the best profitable opportunitites (min >=0.5%) accross exchanges for the best pair from : 3 cryotos Btc/Eth/Sol and 3 currencies USD/T/C
-	triangular: finds the best profitable opportunities (min>=0.5%) between unlimited pairs/currencies NOT exchanges. basically does what manager/conversion.py does, but for profit!
-4. hex arch is not fully implemented. adapters/exchanges need to be redone missing confirmation/rejection messages and in code instructions.
-
-PROBLEMS BELOW FIXED on 1/20/26 by kimi k2
-------------
+last updated 1.23.26 16:00-----------
 
 Project Goal & Hexagonal Refactor Instructions”). This captures exactly what we are trying to achieve, stays 100% faithful to your original strategy (no deviations), and gives any future AI the precise context to continue helping you.
 ## Project Goal & Hexagonal Refactor Instructions
@@ -42,33 +21,37 @@ This is a cryptocurrency arbitrage and hedging bot designed for a ~$9,000 budget
 We are reorganizing the code into a clean **hexagonal / ports & adapters** structure without changing the strategy, settings, or nomenclature.
 
 - **core/**: Pure domain logic & calculations (no I/O, no external deps):
-  - profit.py (net/gross profit, slippage, fees, baseline 0.5%)
-  - risk.py (depth check, volatility slowdown)
-  - thresholds.py (dynamic 0.4–1% threshold)
-  - analysis.py (cvd, wykoff, volume profile, book analysis)
-  - auction.py (chase_limit, sizing, iceberg)
-  - data_feed.py (WS data + short cache, WS-only)
-  - order_executor.py (execution with risk checks)
-  - wrappers.py (exchange REST/WS abstraction)
+DONE  - profit.py (net/gross profit, slippage, fees, baseline 0.5%)
+DONE  - risk.py (depth check, volatility slowdown) MERGED into health_monitor
+DONE  - thresholds.py (dynamic 0.4–1% threshold)
+DONE  - analysis.py (cvd, wykoff, volume profile, book analysis) MERGED into health_monitor!!
 
-- **domain/**: Pure data types
-  - entities.py (Trade, Position, Signal, Mode)
-  - values.py (Price, Amount, Symbol, Network – all Decimal)
-  - aggregates.py (ArbOpportunity, Balance with drift)
+DONE- auction.py (chase_limit, sizing, iceberg)
 
-- **manager/** (coordinators – short names): mode.py, money.py, conversion.py, transfer.py, scanner.py, ws.py, signals.py, fees.py, staking.py, health.py
+DONE order_executor.py (execution with risk checks)
+
+DONE- adapters/feed.py (WS data + short cache, WS-only)
+DONE- exchanges/wrappers.py (exchange REST/WS abstraction)
+
+DONE - **domain/**: Pure data types
+DONE  - entities.py (Trade, Position, Signal, Mode)
+DONE  - values.py (Price, Amount, Symbol, Network – all Decimal)
+DONE  - aggregates.py (ArbOpportunity, Balance with drift)
+
+DONE - **manager/** (coordinators – short names): mode.py, money.py, conversion.py, transfer.py, scanner.py, ws.py, signals.py, fees.py, staking.py, health.py
 
 - **ports/**: Interfaces
   - inbound/: signal.py, command.py
   - outbound/: prices.py, books.py, balances.py, execution.py, fees.py, ws.py
 
-- **adapters/**: Real implementations
-  - exchanges/: base.py, binance.py (ccxt), kraken.py (krakenex), coinbase.py (cbpro)
-  - persistence/: state.py, logs.py
+DONE    - **adapters/**: Real implementations
+DONE    - exchanges/: base.py, binance.py (ccxt), kraken.py (krakenex), coinbase.py (cbpro)
 
-- **bots/**: Q.py, A.py, G.py (slim orchestration)
+ - persistence/: state.py, logs.py
 
-- **orchestrator.py** (merged main + system_orchestrator.py)
+-  **bots/**: Q.py, A.py, G.py (slim orchestration)
+
+DONE- **orchestrator.py** (merged main + system_orchestrator.py)
 
 **Prioritized Tweaks** (must be integrated without changing strategy):
 1. Baseline 0.5% net profit threshold
@@ -80,32 +63,18 @@ We are reorganizing the code into a clean **hexagonal / ports & adapters** struc
 
 **Rules**:
 - Never change the strategy, settings, or existing nomenclature.
-- Extract scattered pure functions into core/.
 - Use Decimal everywhere for money calculations.
-- Keep managers/ and ports/ folders as-is.
-- I make all executive decisions — do not write code unless explicitly asked.
-
-Help me complete this refactor step by step.
 
 Crypto Arbitrage Strategy: Exploiting Market Inefficiencies for Consistent Returns
-
-Executive Summary
-In short, while the crypto markets are more efficient than ever, they are nowhere near perfect! The constant introduction of new assets, fragmented nature of exchanges (centralized/decentralized), 24/7 volatility ensure that crypto arbitrage remains a viable strategy… prices of crypto are never the same across exchanges!
-
-This document outlines a comprehensive cryptocurrency arbitrage and hedging strategy designed for a $9,000 budget in January 2026. The system leverages macro signals for mode switching, specialized bots for arbitrage and accumulation, and optimized capital management to minimize operational costs while maximizing net profitability. Key focuses include reducing transfer frequencies through a 15% drift threshold, prioritizing intra-exchange triangular conversions, and selecting the fastest/cheapest stablecoin networks for any necessary cross-account moves.
-
-All components are aligned with 2026 market conditions, drawing from verified sources such as exchange APIs (e.g., Binance, Kraken, Coinbase), fee aggregators (e.g., WithdrawalFees.com), and industry guides (e.g., PixelPlex, WunderTrading, CoinAPI). The strategy emphasizes capital efficiency, low-risk execution, and fee minimization to achieve 5–20% annual ROI on small capital.
 
 The system operates in two primary modes based on a custom TradingView signal:
 
 Macro Signal:
 	* Fired (BUY BTC/SELL PAXG) on Nov 2023 = BTC Mode
 	* Fired another signal on Nov 2025 (SELL BTC/BUY PAXG) = GOLD Mode.
-
 Capital Allocation:
 	* BTC Mode: 85% → [[Q-Bot]], 15% → [[A-Bot]], 0% → [[G-Bot]]
 	* GOLD Mode: 15% → [[Q-Bot]], 0% → [[A-Bot]], 85% → [[G-Bot]]
-
 System Components
 1. [SIGNAL RECEIVER]
 	* Always running in the background.
@@ -189,8 +158,6 @@ Overall Strategy Notes (Cost-Reduction Emphasis, needs to be finalized)
     * BNB Smart Chain (BEP-20 for USDT): Fees ~$0.01-1 (sometimes free on Binance promotions); time <1-5 minutes. Zero or near-zero in many cases.
 * Never use Ethereum (ERC-20) for transfers under $10k—fees often $0.87-5+ (volatile with congestion), times 5-15+ minutes. Avoid Avalanche unless specifically <$1 confirmed.
 
-QUANT_bot_clean/ #needs to be organized by pure function/job, hexagonal architecture 
-QUANT_bot_clean/ #needs to be organized by pure function/job, hexagonal architecture
 
 ├── main.py                       #work in progress!
     ├── system_orchestrator.py     # copied and pasted into main.py and deleted
@@ -204,17 +171,17 @@ QUANT_bot_clean/ #needs to be organized by pure function/job, hexagonal architec
 │
 ├── adapters/
 │   ├── data
-│   │   ├── feed.py				# used to be data_feed.py
-│   │   └── ws.py                	# PAXG hedging & accumulation
+│   │   ├── feed.py				DONE
+│   │   └── ws.py               DONE
 │   │
-│   └─── persistance.             ** new empty folder!!
+│   └─── persistance.         <---- is this necessary!!
 │   │
 │   └─── exchanges
-│       ├── base.py               # *new needs everything remaining from exchange wrappers!
-│       ├── binanceus.py          # *new taken from exchange wrappers
-│       ├── coinbase_advanced.py  # *new taken from exchange wrappers (missing PEM?)
-│       ├── coinbase.py           # *new taken from exchange wrappers
-│       └── kraken.py.  			# *new taken from exchange wrappers
+│       ├── wrappers.py           DONE
+│       ├── binanceus.py          DONE
+│       ├── coinbase_advanced.py  DONE
+│       ├── coinbase.py           DONE
+│       └── kraken.py             DONE
 │
 ├── bot/
 │   ├── Q.py						# arbitrage (cross + triangular)
@@ -223,18 +190,16 @@ QUANT_bot_clean/ #needs to be organized by pure function/job, hexagonal architec
 │
 │
 ├── core/
-│   ├── analysis.py           # *new "Analyzes trading performance without blocking"
-│   ├── auction.py            # was auction_context_module.py
-│   ├── health_monitor.py     # also measures performance & detects silent failures
-│   ├── order_executor.py     # adv order executor w/ intel routing & risk mgt
-│   ├── profit.py             # *new
-│   ├── risk.py               # *new Risk management and health monitoring....
-│   └── thresholds.py			# *new
+│   ├── auction.py              DONE
+│   ├── health_monitor.py       DONE
+│   ├── order_executor.py       DONE
+│   ├── profit.py               DONE
+│   └── thresholds.py		    DONE
 │
 │
-├── domain/                   # *new
+├── domain/                   # Are these even necessary anymore??
 │   ├── aggregates.py			# *new
-│   ├── entities.py			# *new
+│   ├── entities.py			    # *new
 │   └── values.py				# *new
 │
 │
@@ -245,24 +210,22 @@ QUANT_bot_clean/ #needs to be organized by pure function/job, hexagonal architec
 ├── manager/
 │   ├── fee.py	 		       # tracks all fees & zero fee allowances per account
 │   ├── mode.py         	   # remembers mode & announces, de/activates bots
-│   ├── money.py               # prevents capital stagnation, divides capital
-│   ├── converison.py          # prevents capital drift, minimizes transfers.
-│   ├── transfer.py        	   # Keeps average transfer cost per rebalance <$1
+│   ├── money.py                DONE
+│   ├── converison.py           DONE
+│   ├── transfer.py        	    DONE
 │   ├── scanner.py      	   # notifies QBot of danger or opportunity in price.
-│   ├── websocket_manager.py   # (now = adapters/data/ws.py)
-│   ├── signals.py	 	       # macro & A-bot’s buy/sell signals frm TradingView
-│   └──  staking.py
+│   ├── signals.py	 	        DONE
+│   └── staking.py              DONE
 │
 │
 ├── dashboard.py             		# my visual window (keep this!)
 ├-- mini_dashboard.py	     		# a mini version of dashboard *(now = minidash.py)
-├-- * exchange_wrappers.py			* still needs to be removed!
+├
 │
 │
-├── utils/                    	# this file was also maunally transplanted from elsewhere
-│   ├── config.py			    # ANOTHER config!!
-│   ├── helpers.py			    # not used
-│   ├── logger.py				# dont know if used or connected correctly
+├── utils/
+│   ├── helpers.py			    <--- is this used???
+│   ├── logger.py			    <--- is this used??
 │   └── utils.py                # refactored to here.
 │
 ├── ports/						# new empty folder!!
