@@ -3,34 +3,44 @@
 # an on demand triangular arbitrage machine with specified pairs and finds the cheapest AND fastest routes for the [MONEY MANAGER].
 # tries to keep the drift across accounts below 15% by intra-exchange triangular conversions, so [[Q-bot]] runs smoothly.
 # Does not interrupt arbitrage system
-# One job: Reduces the amount needed to transfer by prioritizing triangular conversions (intra-exchange) over any cross-account transfers whenever possible to eliminate transfer fees entirely.
 
-# originally triangular.py # needs to be redone from scratch 
-Triangular arbitrage detector
+## One job: Reduces the amount needed to transfer by prioritizing triangular conversions (intra-exchange) over any cross-account transfers whenever possible to eliminate transfer fees entirely.
+
+# originally triangular.py #  redone
+
+COINVERSION MANAGER - INTRA-EXCHANGE- Triangular arbitrage
 """
 import itertools
 import logging
 from decimal import Decimal
-
+import os
+from core.health_monitor import HealthMonitor  # For exchange latency
+from manager.transfer import TransferManager  # For fallback transfers
 log = logging.getLogger('tri')
 
-PAIRS = ['BTC-USD','ETH-USD','SOL-USD','ETH-BTC','SOL-BTC','SOL-ETH']
-PATHS = list(itertools.permutations(['USD','BTC','ETH','SOL'], 3))
+PAIRS = ['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','BTC-USDG','ETH-USDG','SOL-USDG' 'ETH-BTC','SOL-BTC','SOL-ETH','BTC-PAXG','PAXG-ETH','SOL-PAXG','USD-USDT','USDT-USDC','USD-USDC','USD-USDG','USDG-USDT','USDG-USDC']  # Expanded for more routes
+PATHS = list(itertools.permutations(['BTC','ETH','SOL','PAXG','USD','USDT','USDC','USDG'], 3))
 
-def detect_triangle(books, min_prof=Decimal('0.08')):
+def detect_triangle(books, specified_pairs=None, exchanges=None, min_prof=Decimal('0.08')):
     """
     books dict  {'exchange': {'BTC-USD':{bids:[],asks:[]}, ...}
     returns [{'path':USD→BTC→ETH→USD, 'ex':kraken, 'prof_pct':0.11}, ...]
     """
     out = []
-    for ex in books:
-        for p in PATHS:
+    paths = list(itertools.permutations(specified_pairs or PAIRS, 3))  # On-demand pairs or default
+    exchanges = exchanges or list(books.keys())  # On-demand exchanges or all
+    health = HealthMonitor()  # For latency
+    for p in paths:
+        for ex in exchanges:
             try:
                 a = Decimal(books[ex][f'{p[1]}-{p[0]}']['asks'][0][0])   # USD→BTC
                 b = Decimal(books[ex][f'{p[2]}-{p[1]}']['asks'][0][0])   # BTC→ETH
                 c = Decimal(books[ex][f'{p[0]}-{p[2]}']['bids'][0][0])   # ETH→USD
                 prof = (Decimal('1')/a * Decimal('1')/b * c - Decimal('1')) * Decimal('100')
                 if prof > min_prof:
-                    out.append({'ex':ex, 'path':p, 'prof_pct':prof})
-                except: continue
-        return sorted(out, key=lambda x: x['prof_pct'], reverse=True)
+                    latency = health.latency_metrics[ex][-1] if health.latency_metrics[ex] else Decimal('0')  # Fastest route
+                    out.append({'ex':ex, 'path':p, 'prof_pct':prof, 'latency_ms':latency})
+            except:
+                continue
+    # Sort by cheapest (prof desc), then fastest (latency asc)
+    return sorted(out, key=lambda x: (-x['prof_pct'], x['latency_ms']))
