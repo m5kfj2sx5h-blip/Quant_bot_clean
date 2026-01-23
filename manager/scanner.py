@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
+from decimal import Decimal
+import statistics
 
 
 class AuctionState(Enum):
@@ -25,7 +27,6 @@ class AuctionState(Enum):
     PRE_OPEN = "pre_open"
     POST_CLOSE = "post_close"
 
-
 class MarketPhase(Enum):
     """Market phase enumeration"""
     ACCUMULATION = "accumulation"
@@ -34,7 +35,6 @@ class MarketPhase(Enum):
     TREND_DOWN = "trend_down"
     SIDEWAYS = "sideways"
 
-
 @dataclass
 class MacroSignal:
     """Macro market signal"""
@@ -42,11 +42,332 @@ class MacroSignal:
     strength: float = 0.0
     confidence: float = 0.0
     indicators: Dict[str, float] = None
-    
+
     def __post_init__(self):
         if self.indicators is None:
             self.indicators = {}
 
+@dataclass
+class ArbitrageOpportunity:
+    """Represents an arbitrage opportunity."""
+    symbol: str
+    buy_exchange: str
+    sell_exchange: str
+    buy_price: float
+    sell_price: float
+    spread_percentage: float
+    estimated_profit: float
+    confidence: float
+    timestamp: float
+    capital_mode: str = "BALANCED"
+    position_size_usd: float = 1000.0
+
+class MarketContext:
+    """Tracks and analyzes market context for intelligent trading."""
+
+    def __init__(self, config: Dict, logger: logging.Logger):
+        """Initialize market context."""
+        self.config = config
+        self.logger = logger
+        self.context = {
+            'volatility': 'NORMAL',
+            'trend': 'NEUTRAL',
+            'liquidity': 'NORMAL',
+            'spread_conditions': 'NORMAL',
+            'market_sentiment': 'NEUTRAL',
+            'capital_mode': 'BALANCED',
+            'available_capital_usd': 1000.0,
+            'exchange_balances': {}
+        }
+
+        # Analysis settings
+        self.settings = {
+            'volatility_window': config.get('volatility_window', 24),
+            'trend_window': config.get('trend_window', 6),
+            'liquidity_threshold': config.get('liquidity_threshold', 100000),
+            'spread_threshold_wide': config.get('spread_threshold_wide', 0.15),
+            'spread_threshold_tight': config.get('spread_threshold_tight', 0.05),
+            'sentiment_lookback': config.get('sentiment_lookback', 12)
+        }
+
+        # Data storage
+        self.price_history = {}
+        self.volume_history = {}
+        self.order_book_history = {}
+
+        self.logger.info("✅ Market context initialized")
+
+    def update(self, new_context: Dict):
+        """Update market context with new information."""
+        self.context.update(new_context)
+
+        # Update capital mode if provided
+        if 'capital_mode' in new_context:
+            self.context['capital_mode'] = new_context['capital_mode']
+
+        if 'available_capital_usd' in new_context:
+            self.context['available_capital_usd'] = new_context['available_capital_usd']
+
+        if 'exchange_balances' in new_context:
+            self.context['exchange_balances'] = new_context['exchange_balances']
+
+    def get_context(self) -> Dict:
+        """Get current market context."""
+        return self.context.copy()
+
+    def analyze_market(self, price_data: Dict, volume_data: Dict) -> Dict:
+        """Analyze market conditions from price and volume data."""
+        analysis = {}
+
+        try:
+            # Analyze volatility
+            volatility = self._calculate_volatility(price_data)
+            analysis['volatility'] = self._classify_volatility(volatility)
+
+            # Analyze trend
+            trend = self._calculate_trend(price_data)
+            analysis['trend'] = self._classify_trend(trend)
+
+            # Analyze liquidity
+            liquidity = self._calculate_liquidity(volume_data)
+            analysis['liquidity'] = self._classify_liquidity(liquidity)
+
+            # Analyze spreads
+            spread_conditions = self._analyze_spreads(price_data)
+            analysis['spread_conditions'] = spread_conditions
+
+            # Analyze market sentiment
+            sentiment = self._analyze_sentiment(price_data, volume_data)
+            analysis['market_sentiment'] = sentiment
+
+            # Update context
+            self.update(analysis)
+
+        except Exception as e:
+            self.logger.error(f"Error in market analysis: {e}")
+            analysis = self.context.copy()
+
+        return analysis
+
+    def _calculate_volatility(self, price_data: Dict) -> float:
+        """Calculate market volatility."""
+        try:
+            all_prices = []
+            for symbol_data in price_data.values():
+                for exchange_data in symbol_data.values():
+                    if 'last' in exchange_data:
+                        all_prices.append(exchange_data['last'])
+
+            if len(all_prices) < 2:
+                return 0.0
+
+            returns = np.diff(all_prices) / all_prices[:-1]
+            volatility = np.std(returns) * np.sqrt(365 * 24)  # Annualized
+
+            return float(volatility)
+
+        except Exception as e:
+            self.logger.debug(f"Volatility calculation error: {e}")
+            return 0.0
+
+    def _classify_volatility(self, volatility: float) -> str:
+        """Classify volatility level."""
+        if volatility > 0.8:
+            return 'HIGH'
+        elif volatility < 0.3:
+            return 'LOW'
+        else:
+            return 'NORMAL'
+
+    def _calculate_trend(self, price_data: Dict) -> float:
+        """Calculate market trend strength."""
+        try:
+            prices = []
+            timestamps = []
+
+            for symbol_data in price_data.values():
+                for exchange_data in symbol_data.values():
+                    if 'last' in exchange_data:
+                        prices.append(exchange_data['last'])
+                        if 'timestamp' in exchange_data:
+                            timestamps.append(exchange_data['timestamp'])
+
+            if len(prices) < 2:
+                return 0.0
+
+            # Simple linear regression for trend
+            if len(timestamps) == len(prices):
+                x = np.array(timestamps)
+                y = np.array(prices)
+                slope = np.polyfit(x - x.mean(), y, 1)[0]
+                trend_strength = slope / np.mean(y) if np.mean(y) > 0 else 0
+            else:
+                # Fallback to simple difference
+                trend_strength = (prices[-1] - prices[0]) / prices[0] if prices[0] > 0 else 0
+
+            return float(trend_strength)
+
+        except Exception as e:
+            self.logger.debug(f"Trend calculation error: {e}")
+            return 0.0
+
+    def _classify_trend(self, trend_strength: float) -> str:
+        """Classify market trend."""
+        if trend_strength > 0.01:
+            return 'BULLISH'
+        elif trend_strength < -0.01:
+            return 'BEARISH'
+        else:
+            return 'NEUTRAL'
+
+    def _calculate_liquidity(self, volume_data: Dict) -> float:
+        """Calculate market liquidity."""
+        try:
+            total_volume = 0.0
+            count = 0
+
+            for symbol_data in volume_data.values():
+                for exchange_data in symbol_data.values():
+                    if 'volume' in exchange_data:
+                        total_volume += exchange_data['volume']
+                        count += 1
+
+            if count == 0:
+                return 0.0
+
+            return total_volume / count
+
+        except Exception as e:
+            self.logger.debug(f"Liquidity calculation error: {e}")
+            return 0.0
+
+    def _classify_liquidity(self, liquidity: float) -> str:
+        """Classify liquidity level."""
+        threshold = self.settings['liquidity_threshold']
+
+        if liquidity > threshold * 1.5:
+            return 'HIGH'
+        elif liquidity < threshold * 0.5:
+            return 'LOW'
+        else:
+            return 'NORMAL'
+
+    def _analyze_spreads(self, price_data: Dict) -> str:
+        """Analyze market spread conditions."""
+        try:
+            spreads = []
+
+            for symbol, symbol_data in price_data.items():
+                for exchange_id, data in symbol_data.items():
+                    if 'ask' in data and 'bid' in data and data['ask'] > 0:
+                        spread = (data['ask'] - data['bid']) / data['ask'] * 100
+                        spreads.append(spread)
+
+            if not spreads:
+                return 'NORMAL'
+
+            avg_spread = np.mean(spreads)
+
+            if avg_spread > self.settings['spread_threshold_wide']:
+                return 'WIDE'
+            elif avg_spread < self.settings['spread_threshold_tight']:
+                return 'TIGHT'
+            else:
+                return 'NORMAL'
+
+        except Exception as e:
+            self.logger.debug(f"Spread analysis error: {e}")
+            return 'NORMAL'
+
+    def _analyze_sentiment(self, price_data: Dict, volume_data: Dict) -> str:
+        """Analyze market sentiment."""
+        try:
+            # Simple sentiment based on price movement and volume
+            price_changes = []
+            volume_changes = []
+
+            for symbol in price_data:
+                if symbol in volume_data:
+                    price_symbol_data = price_data[symbol]
+                    volume_symbol_data = volume_data[symbol]
+
+                    for exchange_id in price_symbol_data:
+                        if exchange_id in volume_symbol_data:
+                            price_data_point = price_symbol_data[exchange_id]
+                            volume_data_point = volume_symbol_data[exchange_id]
+
+                            if 'last' in price_data_point and 'volume' in volume_data_point:
+                                # This is simplified - real implementation would track over time
+                                price_changes.append(price_data_point['last'])
+                                volume_changes.append(volume_data_point['volume'])
+
+            if len(price_changes) < 2 or len(volume_changes) < 2:
+                return 'NEUTRAL'
+
+            # Very basic sentiment heuristic
+            avg_price_change = np.mean(np.diff(price_changes) / price_changes[:-1])
+            avg_volume_change = np.mean(np.diff(volume_changes) / volume_changes[:-1])
+
+            if avg_price_change > 0.001 and avg_volume_change > 0:
+                return 'BULLISH'
+            elif avg_price_change < -0.001 and avg_volume_change > 0:
+                return 'BEARISH'
+            else:
+                return 'NEUTRAL'
+
+        except Exception as e:
+            self.logger.debug(f"Sentiment analysis error: {e}")
+            return 'NEUTRAL'
+
+    def get_trading_parameters(self, context: Dict) -> Dict:
+        """Get trading parameters adjusted for current market context."""
+        params = {
+            'min_profit_threshold': self.config.get('min_profit_threshold', 0.5),
+            'min_spread_percentage': 0.08,
+            'confidence_multiplier': 1.0,
+            'position_size_multiplier': 1.0
+        }
+
+        # Adjust for volatility
+        volatility = context.get('volatility', 'NORMAL')
+        if volatility == 'HIGH':
+            params['min_profit_threshold'] *= 1.5
+            params['min_spread_percentage'] *= 1.3
+            params['confidence_multiplier'] *= 0.7
+            params['position_size_multiplier'] *= 0.5
+        elif volatility == 'LOW':
+            params['min_profit_threshold'] *= 0.8
+            params['min_spread_percentage'] *= 0.8
+            params['confidence_multiplier'] *= 1.2
+            params['position_size_multiplier'] *= 1.2
+
+        # Adjust for spread conditions
+        spread_conditions = context.get('spread_conditions', 'NORMAL')
+        if spread_conditions == 'WIDE':
+            params['min_spread_percentage'] *= 1.2
+            params['confidence_multiplier'] *= 0.9
+        elif spread_conditions == 'TIGHT':
+            params['min_spread_percentage'] *= 0.8
+            params['confidence_multiplier'] *= 1.1
+
+        # Adjust for market sentiment
+        sentiment = context.get('market_sentiment', 'NEUTRAL')
+        if sentiment == 'BEARISH':
+            params['confidence_multiplier'] *= 0.9
+        elif sentiment == 'BULLISH':
+            params['confidence_multiplier'] *= 1.1
+
+        # Adjust for capital mode
+        capital_mode = context.get('capital_mode', 'BALANCED')
+        if capital_mode == 'BOTTLENECKED':
+            # Be more conservative in bottleneck mode
+            params['confidence_multiplier'] *= 0.8
+            params['position_size_multiplier'] *= 0.7
+        elif capital_mode == 'BALANCED':
+            # Can be more aggressive in balanced mode
+            params['confidence_multiplier'] *= 1.1
+
+        return params
 
 class ArbitrageAnalyzer:
     """
@@ -66,331 +387,6 @@ class ArbitrageAnalyzer:
     def get_best_opportunity(self) -> Optional[Dict[str, Any]]:
         """Get best arbitrage opportunity"""
         return None
-    
-
-@dataclass
-class ArbitrageOpportunity:
-    """Represents an arbitrage opportunity."""
-    symbol: str
-    buy_exchange: str
-    sell_exchange: str
-    buy_price: float
-    sell_price: float
-    spread_percentage: float
-    estimated_profit: float
-    confidence: float
-    timestamp: float
-    capital_mode: str = "BALANCED"
-    position_size_usd: float = 1000.0
-
-
-class MarketContext:
-    """Tracks and analyzes market context for intelligent trading."""
-    
-    def __init__(self, config: Dict, logger: logging.Logger):
-        """Initialize market context."""
-        self.config = config
-        self.logger = logger
-        self.context = {
-            'volatility': 'NORMAL',
-            'trend': 'NEUTRAL',
-            'liquidity': 'NORMAL',
-            'spread_conditions': 'NORMAL',
-            'market_sentiment': 'NEUTRAL',
-            'capital_mode': 'BALANCED',
-            'available_capital_usd': 1000.0,
-            'exchange_balances': {}
-        }
-        
-        # Analysis settings
-        self.settings = {
-            'volatility_window': config.get('volatility_window', 24),
-            'trend_window': config.get('trend_window', 6),
-            'liquidity_threshold': config.get('liquidity_threshold', 100000),
-            'spread_threshold_wide': config.get('spread_threshold_wide', 0.15),
-            'spread_threshold_tight': config.get('spread_threshold_tight', 0.05),
-            'sentiment_lookback': config.get('sentiment_lookback', 12)
-        }
-        
-        # Data storage
-        self.price_history = {}
-        self.volume_history = {}
-        self.order_book_history = {}
-        
-        self.logger.info("✅ Market context initialized")
-    
-    def update(self, new_context: Dict):
-        """Update market context with new information."""
-        self.context.update(new_context)
-        
-        # Update capital mode if provided
-        if 'capital_mode' in new_context:
-            self.context['capital_mode'] = new_context['capital_mode']
-        
-        if 'available_capital_usd' in new_context:
-            self.context['available_capital_usd'] = new_context['available_capital_usd']
-        
-        if 'exchange_balances' in new_context:
-            self.context['exchange_balances'] = new_context['exchange_balances']
-    
-    def get_context(self) -> Dict:
-        """Get current market context."""
-        return self.context.copy()
-    
-    def analyze_market(self, price_data: Dict, volume_data: Dict) -> Dict:
-        """Analyze market conditions from price and volume data."""
-        analysis = {}
-        
-        try:
-            # Analyze volatility
-            volatility = self._calculate_volatility(price_data)
-            analysis['volatility'] = self._classify_volatility(volatility)
-            
-            # Analyze trend
-            trend = self._calculate_trend(price_data)
-            analysis['trend'] = self._classify_trend(trend)
-            
-            # Analyze liquidity
-            liquidity = self._calculate_liquidity(volume_data)
-            analysis['liquidity'] = self._classify_liquidity(liquidity)
-            
-            # Analyze spreads
-            spread_conditions = self._analyze_spreads(price_data)
-            analysis['spread_conditions'] = spread_conditions
-            
-            # Analyze market sentiment
-            sentiment = self._analyze_sentiment(price_data, volume_data)
-            analysis['market_sentiment'] = sentiment
-            
-            # Update context
-            self.update(analysis)
-            
-        except Exception as e:
-            self.logger.error(f"Error in market analysis: {e}")
-            analysis = self.context.copy()
-        
-        return analysis
-    
-    def _calculate_volatility(self, price_data: Dict) -> float:
-        """Calculate market volatility."""
-        try:
-            all_prices = []
-            for symbol_data in price_data.values():
-                for exchange_data in symbol_data.values():
-                    if 'last' in exchange_data:
-                        all_prices.append(exchange_data['last'])
-            
-            if len(all_prices) < 2:
-                return 0.0
-            
-            returns = np.diff(all_prices) / all_prices[:-1]
-            volatility = np.std(returns) * np.sqrt(365 * 24)  # Annualized
-            
-            return float(volatility)
-            
-        except Exception as e:
-            self.logger.debug(f"Volatility calculation error: {e}")
-            return 0.0
-    
-    def _classify_volatility(self, volatility: float) -> str:
-        """Classify volatility level."""
-        if volatility > 0.8:
-            return 'HIGH'
-        elif volatility < 0.3:
-            return 'LOW'
-        else:
-            return 'NORMAL'
-    
-    def _calculate_trend(self, price_data: Dict) -> float:
-        """Calculate market trend strength."""
-        try:
-            prices = []
-            timestamps = []
-            
-            for symbol_data in price_data.values():
-                for exchange_data in symbol_data.values():
-                    if 'last' in exchange_data:
-                        prices.append(exchange_data['last'])
-                        if 'timestamp' in exchange_data:
-                            timestamps.append(exchange_data['timestamp'])
-            
-            if len(prices) < 2:
-                return 0.0
-            
-            # Simple linear regression for trend
-            if len(timestamps) == len(prices):
-                x = np.array(timestamps)
-                y = np.array(prices)
-                slope = np.polyfit(x - x.mean(), y, 1)[0]
-                trend_strength = slope / np.mean(y) if np.mean(y) > 0 else 0
-            else:
-                # Fallback to simple difference
-                trend_strength = (prices[-1] - prices[0]) / prices[0] if prices[0] > 0 else 0
-            
-            return float(trend_strength)
-            
-        except Exception as e:
-            self.logger.debug(f"Trend calculation error: {e}")
-            return 0.0
-    
-    def _classify_trend(self, trend_strength: float) -> str:
-        """Classify market trend."""
-        if trend_strength > 0.01:
-            return 'BULLISH'
-        elif trend_strength < -0.01:
-            return 'BEARISH'
-        else:
-            return 'NEUTRAL'
-    
-    def _calculate_liquidity(self, volume_data: Dict) -> float:
-        """Calculate market liquidity."""
-        try:
-            total_volume = 0.0
-            count = 0
-            
-            for symbol_data in volume_data.values():
-                for exchange_data in symbol_data.values():
-                    if 'volume' in exchange_data:
-                        total_volume += exchange_data['volume']
-                        count += 1
-            
-            if count == 0:
-                return 0.0
-            
-            return total_volume / count
-            
-        except Exception as e:
-            self.logger.debug(f"Liquidity calculation error: {e}")
-            return 0.0
-    
-    def _classify_liquidity(self, liquidity: float) -> str:
-        """Classify liquidity level."""
-        threshold = self.settings['liquidity_threshold']
-        
-        if liquidity > threshold * 1.5:
-            return 'HIGH'
-        elif liquidity < threshold * 0.5:
-            return 'LOW'
-        else:
-            return 'NORMAL'
-    
-    def _analyze_spreads(self, price_data: Dict) -> str:
-        """Analyze market spread conditions."""
-        try:
-            spreads = []
-            
-            for symbol, symbol_data in price_data.items():
-                for exchange_id, data in symbol_data.items():
-                    if 'ask' in data and 'bid' in data and data['ask'] > 0:
-                        spread = (data['ask'] - data['bid']) / data['ask'] * 100
-                        spreads.append(spread)
-            
-            if not spreads:
-                return 'NORMAL'
-            
-            avg_spread = np.mean(spreads)
-            
-            if avg_spread > self.settings['spread_threshold_wide']:
-                return 'WIDE'
-            elif avg_spread < self.settings['spread_threshold_tight']:
-                return 'TIGHT'
-            else:
-                return 'NORMAL'
-                
-        except Exception as e:
-            self.logger.debug(f"Spread analysis error: {e}")
-            return 'NORMAL'
-    
-    def _analyze_sentiment(self, price_data: Dict, volume_data: Dict) -> str:
-        """Analyze market sentiment."""
-        try:
-            # Simple sentiment based on price movement and volume
-            price_changes = []
-            volume_changes = []
-            
-            for symbol in price_data:
-                if symbol in volume_data:
-                    price_symbol_data = price_data[symbol]
-                    volume_symbol_data = volume_data[symbol]
-                    
-                    for exchange_id in price_symbol_data:
-                        if exchange_id in volume_symbol_data:
-                            price_data_point = price_symbol_data[exchange_id]
-                            volume_data_point = volume_symbol_data[exchange_id]
-                            
-                            if 'last' in price_data_point and 'volume' in volume_data_point:
-                                # This is simplified - real implementation would track over time
-                                price_changes.append(price_data_point['last'])
-                                volume_changes.append(volume_data_point['volume'])
-            
-            if len(price_changes) < 2 or len(volume_changes) < 2:
-                return 'NEUTRAL'
-            
-            # Very basic sentiment heuristic
-            avg_price_change = np.mean(np.diff(price_changes) / price_changes[:-1])
-            avg_volume_change = np.mean(np.diff(volume_changes) / volume_changes[:-1])
-            
-            if avg_price_change > 0.001 and avg_volume_change > 0:
-                return 'BULLISH'
-            elif avg_price_change < -0.001 and avg_volume_change > 0:
-                return 'BEARISH'
-            else:
-                return 'NEUTRAL'
-                
-        except Exception as e:
-            self.logger.debug(f"Sentiment analysis error: {e}")
-            return 'NEUTRAL'
-    
-    def get_trading_parameters(self, context: Dict) -> Dict:
-        """Get trading parameters adjusted for current market context."""
-        params = {
-            'min_profit_threshold': self.config.get('min_profit_threshold', 0.5),
-            'min_spread_percentage': 0.08,
-            'confidence_multiplier': 1.0,
-            'position_size_multiplier': 1.0
-        }
-        
-        # Adjust for volatility
-        volatility = context.get('volatility', 'NORMAL')
-        if volatility == 'HIGH':
-            params['min_profit_threshold'] *= 1.5
-            params['min_spread_percentage'] *= 1.3
-            params['confidence_multiplier'] *= 0.7
-            params['position_size_multiplier'] *= 0.5
-        elif volatility == 'LOW':
-            params['min_profit_threshold'] *= 0.8
-            params['min_spread_percentage'] *= 0.8
-            params['confidence_multiplier'] *= 1.2
-            params['position_size_multiplier'] *= 1.2
-        
-        # Adjust for spread conditions
-        spread_conditions = context.get('spread_conditions', 'NORMAL')
-        if spread_conditions == 'WIDE':
-            params['min_spread_percentage'] *= 1.2
-            params['confidence_multiplier'] *= 0.9
-        elif spread_conditions == 'TIGHT':
-            params['min_spread_percentage'] *= 0.8
-            params['confidence_multiplier'] *= 1.1
-        
-        # Adjust for market sentiment
-        sentiment = context.get('market_sentiment', 'NEUTRAL')
-        if sentiment == 'BEARISH':
-            params['confidence_multiplier'] *= 0.9
-        elif sentiment == 'BULLISH':
-            params['confidence_multiplier'] *= 1.1
-        
-        # Adjust for capital mode
-        capital_mode = context.get('capital_mode', 'BALANCED')
-        if capital_mode == 'BOTTLENECKED':
-            # Be more conservative in bottleneck mode
-            params['confidence_multiplier'] *= 0.8
-            params['position_size_multiplier'] *= 0.7
-        elif capital_mode == 'BALANCED':
-            # Can be more aggressive in balanced mode
-            params['confidence_multiplier'] *= 1.1
-        
-        return params
-
 
 class ArbitrageAnalyzer:
     """Advanced arbitrage opportunity analyzer."""
