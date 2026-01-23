@@ -346,16 +346,16 @@ class ArbitrageAnalyzer:
         
         # Analysis settings
         self.settings = {
-            'min_confidence': config.get('min_confidence', 0.6),
-            'max_slippage_percent': config.get('max_slippage_percent', 0.5),
-            'liquidity_requirement': config.get('liquidity_requirement', 0.1),
-            'max_position_size_usd': config.get('max_position_size_usd', 5000.0),
-            'min_position_size_usd': config.get('min_position_size_usd', 10.0)
+            'min_confidence': Decimal(str(config.get('min_confidence', 0.6))),
+            'max_slippage_percent': Decimal(str(config.get('max_slippage_percent', 0.5))),
+            'liquidity_requirement': Decimal(str(config.get('liquidity_requirement', 0.1))),
+            'max_position_size_usd': Decimal(str(config.get('max_position_size_usd', 5000.0))),
+            'min_position_size_usd': Decimal(str(config.get('min_position_size_usd', 10.0)))
         }
-        
+
         # Capital mode settings
         self.capital_mode = context.get('capital_mode', 'BALANCED')
-        self.available_capital_usd = context.get('available_capital_usd', 1000.0)
+        self.available_capital_usd = Decimal(str(context.get('available_capital_usd', 1000.0)))
         self.exchange_balances = context.get('exchange_balances', {})
         
         self.logger.info("✅ Arbitrage analyzer initialized")
@@ -425,38 +425,37 @@ class ArbitrageAnalyzer:
 
         return params
 
-    def _calculate_dynamic_position_size(self) -> float:
+    def _calculate_dynamic_position_size(self) -> Decimal:
         """Calculate dynamic position size based on capital mode and available capital."""
         try:
             # Base calculation from available capital
             if self.capital_mode == 'BOTTLENECKED':
                 # In bottleneck mode, use 95% of available capital (capped)
-                base_size = self.available_capital_usd * 0.95
-            else:  # BALANCED mode
+                base_size = self.available_capital_usd * Decimal('0.95')
+            else:
+                # BALANCED mode
                 # In balanced mode, use 40% of available capital
-                base_size = self.available_capital_usd * 0.40
-            
+                base_size = self.available_capital_usd * Decimal('0.40')
+
             # Apply config limits
             position_size = min(base_size, self.settings['max_position_size_usd'])
             position_size = max(position_size, self.settings['min_position_size_usd'])
-            
+
             # Ensure we don't exceed individual exchange balances
             if self.exchange_balances:
                 min_balance = min(self.exchange_balances.values())
-                position_size = min(position_size, min_balance * 0.8)  # 80% safety margin
-            
+                position_size = min(position_size, min_balance * Decimal('0.8'))  # 80% safety margin
+
             self.logger.debug(
-                f"   Dynamic position size: ${position_size:.2f} "
-                f"(Mode: {self.capital_mode}, Available: ${self.available_capital_usd:.2f})"
+                f" Dynamic position size: ${position_size.quantize(Decimal('0.00'))} "
+                f"(Mode: {self.capital_mode}, Available: ${self.available_capital_usd.quantize(Decimal('0.00'))})"
             )
-            
             return position_size
-            
         except Exception as e:
             self.logger.error(f"Error calculating dynamic position size: {e}")
             # Fallback to config default
-            return self.config.get('position_size', 1000.0)
-    
+            return Decimal(str(self.config.get('position_size', 1000.0)))
+
     def _analyze_symbol(self, symbol: str, symbol_data: Dict, trading_params: Dict) -> List[ArbitrageOpportunity]:
         """Analyze arbitrage opportunities for a single symbol."""
         opportunities = []
@@ -547,84 +546,84 @@ class ArbitrageAnalyzer:
                 opportunities.append(opportunity)
         
         return opportunities
-    
-    def _calculate_confidence(self, buy_data: Dict, sell_data: Dict, spread_pct: float, asset_amount: float) -> float:
+
+    def _calculate_confidence(self, buy_data: Dict, sell_data: Dict, spread_pct: Decimal, asset_amount: Decimal) -> Decimal:
         """Calculate confidence score for an opportunity."""
-        confidence = 0.5  # Base confidence
-        
+        confidence = Decimal('0.5')  # Base confidence
+
         # Spread-based confidence
-        if spread_pct > 0.15:
-            confidence += 0.2
-        elif spread_pct > 0.10:
-            confidence += 0.1
-        
+        if spread_pct > Decimal('0.15'):
+            confidence += Decimal('0.2')
+        elif spread_pct > Decimal('0.10'):
+            confidence += Decimal('0.1')
+
         # Volume-based confidence
-        buy_volume = buy_data.get('volume', 0)
-        sell_volume = sell_data.get('volume', 0)
-        
-        if buy_volume > 100 and sell_volume > 100:
-            confidence += 0.1
-        elif buy_volume > 50 and sell_volume > 50:
-            confidence += 0.05
-        
+        buy_volume = Decimal(str(buy_data.get('volume', 0)))
+        sell_volume = Decimal(str(sell_data.get('volume', 0)))
+
+        if buy_volume > Decimal('100') and sell_volume > Decimal('100'):
+            confidence += Decimal('0.1')
+        elif buy_volume > Decimal('50') and sell_volume > Decimal('50'):
+            confidence += Decimal('0.05')
+
         # Order book depth confidence
         buy_depth = self._calculate_order_book_depth(buy_data.get('order_book', {}))
         sell_depth = self._calculate_order_book_depth(sell_data.get('order_book', {}))
-        
-        if buy_depth > asset_amount * 2 and sell_depth > asset_amount * 2:
-            confidence += 0.15
+
+        if buy_depth > asset_amount * Decimal('2') and sell_depth > asset_amount * Decimal('2'):
+            confidence += Decimal('0.15')
         elif buy_depth > asset_amount and sell_depth > asset_amount:
-            confidence += 0.05
-        
+            confidence += Decimal('0.05')
+
         # Cap confidence between 0.1 and 0.95
-        return max(0.1, min(0.95, confidence))
-    
-    def _calculate_order_book_depth(self, order_book: Dict) -> float:
+        return max(Decimal('0.1'), min(Decimal('0.95'), confidence))
+
+    def _calculate_order_book_depth(self, order_book: Dict) -> Decimal:
         """Calculate order book depth."""
         if not order_book or 'bids' not in order_book or 'asks' not in order_book:
-            return 0.0
-        
+            return Decimal('0.0')
+
         bids = order_book.get('bids', [])
         asks = order_book.get('asks', [])
-        
+
         if not bids or not asks:
-            return 0.0
-        
+            return Decimal('0.0')
+
         # Calculate depth up to 1% from best price
-        best_bid = bids[0][0]
-        best_ask = asks[0][0]
-        mid_price = (best_bid + best_ask) / 2
-        
-        depth_range = mid_price * 0.01  # 1% range
-        
-        bid_depth = sum(amount for price, amount in bids if price >= best_bid - depth_range)
-        ask_depth = sum(amount for price, amount in asks if price <= best_ask + depth_range)
-        
+        best_bid = Decimal(str(bids[0][0]))
+        best_ask = Decimal(str(asks[0][0]))
+        mid_price = (best_bid + best_ask) / Decimal('2')
+
+        depth_range = mid_price * Decimal('0.01')  # 1% range
+
+        bid_depth = sum(Decimal(str(amount)) for price, amount in bids if Decimal(str(price)) >= best_bid - depth_range)
+        ask_depth = sum(Decimal(str(amount)) for price, amount in asks if Decimal(str(price)) <= best_ask + depth_range)
+
         return min(bid_depth, ask_depth)
-    
-    def _check_liquidity(self, buy_data: Dict, sell_data: Dict, required_amount: float) -> bool:
+
+    def _check_liquidity(self, buy_data: Dict, sell_data: Dict, required_amount: Decimal) -> bool:
         """Check if there's sufficient liquidity for the trade."""
         buy_order_book = buy_data.get('order_book', {})
         sell_order_book = sell_data.get('order_book', {})
-        
+
         # Check buy side (asks)
-        buy_liquidity = 0.0
+        buy_liquidity = Decimal('0.0')
         if 'asks' in buy_order_book:
             for price, amount in buy_order_book['asks']:
-                buy_liquidity += amount
+                buy_liquidity += Decimal(str(amount))
                 if buy_liquidity >= required_amount:
                     break
-        
+
         # Check sell side (bids)
-        sell_liquidity = 0.0
+        sell_liquidity = Decimal('0.0')
         if 'bids' in sell_order_book:
             for price, amount in sell_order_book['bids']:
-                sell_liquidity += amount
+                sell_liquidity += Decimal(str(amount))
                 if sell_liquidity >= required_amount:
                     break
-        
+
         return buy_liquidity >= required_amount and sell_liquidity >= required_amount
-    
+
     def filter_opportunities(self, opportunities: List[ArbitrageOpportunity], max_opportunities: int = 5) -> List[ArbitrageOpportunity]:
         """Filter and rank opportunities."""
         if not opportunities:
