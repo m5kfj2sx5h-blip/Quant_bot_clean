@@ -23,6 +23,7 @@ class MoneyManager:
         self.MACRO_TRIGGER_THRESHOLD = Decimal('0.10')  # 10% deviation triggers a macro review suggestion
         self.MIN_MACRO_TRANSFER_VALUE = Decimal('500.0')  # Don't suggest manual transfers under $500
         self.last_macro_analysis = None
+        self.conversion_manager = ConversionManager()
         self.mode_manager = ModeManager()  # For GOLD/BTC mode
         self.conversion_manager = ConversionManager()  # For fee-free triangular
         self.latency_mode = os.getenv('LATENCY_MODE', 'laptop').lower()
@@ -117,6 +118,29 @@ class MoneyManager:
                     needs_macro_review = True
                     logger.info(f"📊 Macro Review: {asset} is at {current:.1%} vs target {target:.1%}")
                     break
+
+                    # Drift control - prioritize intra-triangular to eliminate fees
+                    drift_data = []
+                    for asset, current in current_allocations.items():
+                        target = self.MACRO_TARGET_ALLOCATIONS.get(asset, Decimal('0'))
+                        deviation = abs(current - target)
+                        if deviation >= Decimal('0.15'):  # 15% drift threshold for intra
+                            drift_data.append((asset, deviation))
+
+                    if drift_data:
+                        if self.conversion_manager.control_drift(drift_data):
+                            self.logger.info(
+                                f"Drift controlled via intra-triangular for {len(drift_data)} assets — no transfer fees")
+                        else:
+                            self.logger.warning(
+                                f"Drift >=15% for {len(drift_data)} assets — no intra route, manual transfer needed")
+
+                    # Update capital mode after drift check
+                    if any(dev >= Decimal('0.15') for _, dev in drift_data) or total_stable < Decimal('1500'):
+                        self.capital_mode = "bottlenecked"
+                    else:
+                        self.capital_mode = "balanced"
+                    self.logger.info(f"Capital mode: {self.capital_mode}")
 
             if not needs_macro_review:
                 return None
