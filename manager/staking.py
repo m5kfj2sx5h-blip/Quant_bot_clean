@@ -4,24 +4,19 @@
         - Stakes 100% of idle Alpha capital in mix crypto/stable
         - Reserves last 2 positions in stable highest APR per account, buy if not held).
         """
-
 import logging
 from decimal import Decimal
 import ccxt  # For dynamic APR
 from core.order_executor import OrderExecutor  # For buy if not held
 
-
 class StakingManager:
     def __init__(self, exchanges, config):
-        # ...
-        self.stable_reserve_slots = 2  # Last 2 for stable
-        self.stable_coins = ['USDC', 'USDT', 'USDG']  # From research, dynamic in _get_aprs
-        self.min_bond_short = self.config.get('staking', {}).get('min_bond_short', Decimal('7'))  # Days, user config
-        self.min_bond_long = self.config.get('staking', {}).get('min_bond_long', Decimal('7'))  # Days for long
         self.exchanges = exchanges
         self.config = config
         self.min_apr = self.config.get('staking', {}).get('min_apr', Decimal('1.0'))  # User config
         self.min_rank = self.config.get('staking', {}).get('min_rank', 100)  # User config for safety
+        self.min_bond_short = self.config.get('staking', {}).get('min_bond_short', Decimal('7'))  # Days, user config
+        self.min_bond_long = self.config.get('staking', {}).get('min_bond_long', Decimal('7'))  # Days for long
         self.slots = self.config['staking']['slots']
         self.staked = {}
         self.aprs = self._get_aprs()  # Dynamic
@@ -30,31 +25,37 @@ class StakingManager:
 
     def _get_aprs(self):
         aprs = {}
+        try:
+            coingecko = ccxt.coingecko()
+            markets = coingecko.fetch_markets(params={'vs_currency': 'usd', 'order': 'staking_apy_desc', 'per_page': 50,
+                                                      'page': 1})  # Fetch top 50 by APY
             for m in markets:
                 coin = m['id']
                 apr = Decimal(str(m.get('staking_apy', 0.0)))
+                bond_days = Decimal(str(m.get('staking_bond_period_days', 0)))  # From CoinGecko
                 if apr < self.min_apr or m.get('market_cap_rank', 1000) > self.min_rank:
-                    continue  # Filter low APY/presales (high rank = low cap)
+                    continue  # Filter low APY/presales
                 best_exchange = None
-                max_apr = apr  # Base from CoinGecko
+                max_apr = apr
                 for name, ex in self.exchanges.items():
                     try:
                         staking_info = ex.fetch_staking_rewards()
                         exchange_apr = Decimal(str(staking_info.get(coin, {}).get('apr', 0.0)))
+                        exchange_bond = Decimal(str(staking_info.get(coin, {}).get('bond_period_days', 0)))
                         if exchange_apr > max_apr:
                             max_apr = exchange_apr
+                            bond_days = exchange_bond
                             best_exchange = name
                     except:
                         continue
                 if best_exchange:
-                    aprs[coin] = {'apr': max_apr, 'exchange': best_exchange}
-                    self.logger.info(f"Fetched APR for {coin}: {max_apr}% on {best_exchange}")
-
-                except Exception as e:
-                self.logger.error(f"APR fetch failed: {e}—fallback to config")
-                aprs = {coin: Decimal(str(self.config['staking']['aprs'][coin])) for coin in
-                    self.config['staking']['coins']}
-            return aprs
+                    aprs[coin] = {'apr': max_apr, 'bond_days': bond_days, 'exchange': best_exchange}
+                    self.logger.info(f"✅ Fetched APR for {coin}: {max_apr}% on {best_exchange} (bond: {bond_days} days)")
+        except Exception as e:
+            self.logger.error(f"⚠️ APR fetch failed: {e}—fallback to config")
+            aprs = {coin: {'apr': Decimal(str(self.config['staking']['aprs'][coin])), 'bond_days': Decimal('0'),
+                           'exchange': 'binanceus'} for coin in self.config['staking']['coins']}
+        return aprs
 
     def stake(self, coin, amount: Decimal):
         if coin not in self.coins:
@@ -84,23 +85,21 @@ class StakingManager:
             self.logger.error(f"❌ Staking failed: {e}")
             return False
 
-    def find_best_seat_warmers(self, idle_amount: Decimal, from_signals: bool = False):
-        """Stake 100% idle in mix crypto/stable (reserve last 2 stable highest APR per account, buy if not held)."""
+    def find_best_seat_warmers(self, idle_amount: Decimal, high_idle: bool = False):
+        """Stake 100% idle in multiple highest APR dynamic coins (long for committed/high-idle/signals, short for remaining/empty, buy if not held)."""
         sorted_aprs = sorted(self.aprs.items(), key=lambda x: x[1]['apr'], reverse=True)
-        crypto_aprs = [item for item in sorted_aprs if item[0] not in self.stable_coins]
-        stable_aprs = [item for item in sorted_aprs if item[0] in self.stable_coins]
         stake_count = self.slots - len(self.staked)
         if stake_count <= 0:
             return
-        # Reserve stable for last 2
-        if stake_count <= self.stable_reserve_slots:
-            sorted_aprs = stable_aprs  # Only stable
-        else:
-            sorted_aprs = crypto_aprs + stable_aprs  # Mix
         per_stake = idle_amount / Decimal(stake_count)
         for coin, info in sorted_aprs:
             if len(self.staked) < self.slots:
-                self.stake(coin, per_stake)
+                if high_idle or from_signals:  # Long-term for high-idle/signals
+                    if info['bond_days'] > self.min_bond_long:
+                        self.stake(coin, per_stake)
+                else:  # Short-term for remaining/empty
+                    if info['bond_days'] < self.min_bond_short:
+                        self.stake(coin, per_stake)
 
     def allocate(self, amount: Decimal):
         for coin in self.coins:
