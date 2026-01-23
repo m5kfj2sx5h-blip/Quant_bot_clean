@@ -1,7 +1,8 @@
 """ STAKING MANAGER V 3.0.0 :
         - Advanced Dynamic Staking - fetches best APRs per exchange
-        - Stakes Alpha bot's x6 BUY positions
         - Stakes Alpha bot's Idle money between BUY/SELL signals
+        - Stakes 100% of idle Alpha capital in mix crypto/stable
+        - Reserves last 2 positions in stable highest APR per account, buy if not held).
         """
 
 import logging
@@ -12,6 +13,11 @@ from core.order_executor import OrderExecutor  # For buy if not held
 
 class StakingManager:
     def __init__(self, exchanges, config):
+        # ...
+        self.stable_reserve_slots = 2  # Last 2 for stable
+        self.stable_coins = ['USDC', 'USDT', 'USDG']  # From research, dynamic in _get_aprs
+        self.min_bond_short = self.config.get('staking', {}).get('min_bond_short', Decimal('7'))  # Days, user config
+        self.min_bond_long = self.config.get('staking', {}).get('min_bond_long', Decimal('7'))  # Days for long
         self.exchanges = exchanges
         self.config = config
         self.min_apr = self.config.get('staking', {}).get('min_apr', Decimal('1.0'))  # User config
@@ -24,10 +30,6 @@ class StakingManager:
 
     def _get_aprs(self):
         aprs = {}
-        try:
-            coingecko = ccxt.coingecko()
-            markets = coingecko.fetch_markets(params={'vs_currency': 'usd', 'order': 'staking_apy_desc', 'per_page': 50,
-                                                      'page': 1})  # Fetch top 50 by APY
             for m in markets:
                 coin = m['id']
                 apr = Decimal(str(m.get('staking_apy', 0.0)))
@@ -47,11 +49,12 @@ class StakingManager:
                 if best_exchange:
                     aprs[coin] = {'apr': max_apr, 'exchange': best_exchange}
                     self.logger.info(f"Fetched APR for {coin}: {max_apr}% on {best_exchange}")
-        except Exception as e:
-            self.logger.error(f"APR fetch failed: {e}—fallback to config")
-            aprs = {coin: Decimal(str(self.config['staking']['aprs'][coin])) for coin in
+
+                except Exception as e:
+                self.logger.error(f"APR fetch failed: {e}—fallback to config")
+                aprs = {coin: Decimal(str(self.config['staking']['aprs'][coin])) for coin in
                     self.config['staking']['coins']}
-        return aprs
+            return aprs
 
     def stake(self, coin, amount: Decimal):
         if coin not in self.coins:
@@ -81,11 +84,20 @@ class StakingManager:
             self.logger.error(f"❌ Staking failed: {e}")
             return False
 
-    def find_best_seat_warmers(self, idle_amount: Decimal):
-        """Stake 100% idle in multiple highest APR dynamic coins/exchanges (buy if not held)."""
+    def find_best_seat_warmers(self, idle_amount: Decimal, from_signals: bool = False):
+        """Stake 100% idle in mix crypto/stable (reserve last 2 stable highest APR per account, buy if not held)."""
         sorted_aprs = sorted(self.aprs.items(), key=lambda x: x[1]['apr'], reverse=True)
-        stake_count = min(len(sorted_aprs), self.slots - len(self.staked))
-        per_stake = idle_amount / Decimal(stake_count) if stake_count > 0 else Decimal('0.0')
+        crypto_aprs = [item for item in sorted_aprs if item[0] not in self.stable_coins]
+        stable_aprs = [item for item in sorted_aprs if item[0] in self.stable_coins]
+        stake_count = self.slots - len(self.staked)
+        if stake_count <= 0:
+            return
+        # Reserve stable for last 2
+        if stake_count <= self.stable_reserve_slots:
+            sorted_aprs = stable_aprs  # Only stable
+        else:
+            sorted_aprs = crypto_aprs + stable_aprs  # Mix
+        per_stake = idle_amount / Decimal(stake_count)
         for coin, info in sorted_aprs:
             if len(self.staked) < self.slots:
                 self.stake(coin, per_stake)
@@ -98,6 +110,8 @@ class StakingManager:
             self.stake(coin, stake_amount)
 
     def unstake(self, coin, amount: Decimal = None):
+        def unstake(self, coin, amount: Decimal = None):
+        # Unstake short-term first on signal
         if coin not in self.staked:
             self.logger.error(f"No staking for {coin}")
             return False
