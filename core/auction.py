@@ -5,15 +5,15 @@ import math
 import logging
 from typing import List, Tuple
 from manager.scanner import MarketContext, AuctionState
-
+from decimal import Decimal
 
 class AuctionContextModule:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-    def analyze_order_book(self, bids: List[Tuple[float, float]],
-                           asks: List[Tuple[float, float]],
-                           last_price: float,
+    def analyze_order_book(self, bids: List[Tuple[Decimal, Decimal]],
+                           asks: List[Tuple[Decimal, Decimal]],
+                           last_price: Decimal,
                            context: MarketContext) -> MarketContext:
         """Analyze order book to determine auction context"""
         try:
@@ -21,8 +21,8 @@ class AuctionContextModule:
                 return context
 
             # Calculate top 5 levels imbalance
-            bid_vol = sum(qty for _, qty in bids[:5]) if len(bids[0]) > 1 else len(bids[:5])
-            ask_vol = sum(qty for _, qty in asks[:5]) if len(asks[0]) > 1 else len(asks[:5])
+            bid_vol = sum(Decimal(str(qty)) for _, qty in bids[:5]) if len(bids[0]) > 1 else len(bids[:5])
+            ask_vol = sum(Decimal(str(qty)) for _, qty in asks[:5]) if len(asks[0]) > 1 else len(asks[:5])
 
             if bid_vol + ask_vol > 0:
                 context.auction_imbalance_score = (bid_vol - ask_vol) / (bid_vol + ask_vol)
@@ -40,13 +40,13 @@ class AuctionContextModule:
                 context.crowd_behavior = "aggressive_selling"
             elif 0.1 <= abs_score <= 0.3:
                 # Check price acceptance
-                best_bid = bids[0][0] if bids[0] else 0
-                best_ask = asks[0][0] if asks[0] else 0
+                best_bid = Decimal(str(bids[0][0])) if bids[0] else 0
+                best_ask = Decimal(str(asks[0][0])) if asks[0] else 0
 
                 if best_bid and best_ask:
-                    mid_price = (best_bid + best_ask) / 2
+                    mid_price = (best_bid + best_ask) / Decimal('2')
 
-                    if abs(last_price - mid_price) / mid_price < 0.001:
+                    if abs(Decimal(str(last_price)) - mid_price) / mid_price < 0.001:
                         context.auction_state = AuctionState.ACCEPTING
                         context.crowd_behavior = "accepting_prices"
                     elif last_price > best_ask and context.auction_imbalance_score < 0:
@@ -61,8 +61,8 @@ class AuctionContextModule:
 
             # Set key levels if we have order book data
             if bids and asks:
-                context.key_support = bids[0][0] * 0.995 if bids[0][0] else None
-                context.key_resistance = asks[0][0] * 1.005 if asks[0][0] else None
+                context.key_support = Decimal(str(bids[0][0])) * Decimal('0.995') if bids[0][0] else None
+                context.key_resistance = Decimal(str(asks[0][0])) * Decimal('1.005') if asks[0][0] else None
 
             # Calculate volume strength (simplified)
             total_vol = bid_vol + ask_vol
@@ -93,14 +93,14 @@ class AuctionContextModule:
             return None
 
         try:
-            ref = float(levels[0][0])
+            ref = Decimal(str(levels[0][0]))
         except (IndexError, ValueError):
             return None
 
         while rem > 0 and lvl < len(levels):
             try:
-                px = float(levels[lvl][0])
-                avail = float(levels[lvl][1])
+                px = Decimal(str(levels[lvl][0]))
+                avail = Decimal(str(levels[lvl][1]))
             except (IndexError, ValueError):
                 break
             slip = abs(px - ref) / ref if ref else 0
@@ -121,13 +121,13 @@ class AuctionContextModule:
     def auction_micro_timing(book, side):
         """Return 0-1 score: 1 = perfect auction edge (thin book, wide spread)."""
         try:
-            b = float(book['bids'][0][0])
-            a = float(book['asks'][0][0])
+            b = Decimal(str(book['bids'][0][0]))
+            a = Decimal(str(book['asks'][0][0]))
         except (IndexError, ValueError):
             return 0.0
         spread = (a - b) / b if b else 0.0
-        bid_depth = sum([float(x[1]) for x in book.get('bids', [])[:5]])
-        ask_depth = sum([float(x[1]) for x in book.get('asks', [])[:5]])
+        bid_depth = sum([Decimal(str(x[1])) for x in book.get('bids', [])[:5]])
+        ask_depth = sum([Decimal(str(x[1])) for x in book.get('asks', [])[:5]])
         depth = min(bid_depth, ask_depth)
-        return min(1.0, spread * 100 + 1.0 / (depth + 1.0))
+        return min(Decimal('1.0'), spread * Decimal('100') + Decimal('1.0') / (depth + Decimal('1.0')))
 

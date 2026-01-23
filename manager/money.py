@@ -1,4 +1,4 @@
-Was rebalance_monitor.py and name was changed to money_manager.py
+# Was rebalance_monitor.py and name was changed to money_manager.py
 
 import logging
 import json

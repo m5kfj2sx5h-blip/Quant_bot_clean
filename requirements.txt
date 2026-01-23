@@ -27,7 +27,7 @@ krakenex>=2.1.0
 coinbase>=2.1.0
 asyncio>=3.4.3
 
+psutil
 binance-connector-python
 coinbase-advanced-py
 python-kraken-sdk
-psutil
