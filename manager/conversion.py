@@ -10,13 +10,14 @@ Triangular arbitrage detector
 """
 import itertools
 import logging
+from decimal import Decimal
 
 log = logging.getLogger('tri')
 
 PAIRS = ['BTC-USD','ETH-USD','SOL-USD','ETH-BTC','SOL-BTC','SOL-ETH']
 PATHS = list(itertools.permutations(['USD','BTC','ETH','SOL'], 3))
 
-def detect_triangle(books, min_prof=0.08):
+def detect_triangle(books, min_prof=Decimal('0.08')):
     """
     books dict  {'exchange': {'BTC-USD':{bids:[],asks:[]}, ...}
     returns [{'path':USD→BTC→ETH→USD, 'ex':kraken, 'prof_pct':0.11}, ...]
@@ -25,10 +26,10 @@ def detect_triangle(books, min_prof=0.08):
     for ex in books:
         for p in PATHS:
             try:
-                a = float(books[ex][f'{p[1]}-{p[0]}']['asks'][0][0])   # USD→BTC
-                b = float(books[ex][f'{p[2]}-{p[1]}']['asks'][0][0])   # BTC→ETH
-                c = float(books[ex][f'{p[0]}-{p[2]}']['bids'][0][0])   # ETH→USD
-                prof = (1/a * 1/b * c - 1) * 100
+                a = Decimal(books[ex][f'{p[1]}-{p[0]}']['asks'][0][0])   # USD→BTC
+                b = Decimal(books[ex][f'{p[2]}-{p[1]}']['asks'][0][0])   # BTC→ETH
+                c = Decimal(books[ex][f'{p[0]}-{p[2]}']['bids'][0][0])   # ETH→USD
+                prof = (Decimal('1')/a * Decimal('1')/b * c - Decimal('1')) * Decimal('100')
                 if prof > min_prof:
                     out.append({'ex':ex, 'path':p, 'prof_pct':prof})
                 except: continue
