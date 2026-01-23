@@ -12,9 +12,9 @@ class StakingManager:
         self.coins = self.config['staking']['coins']
         self.slots = self.config['staking']['slots']
         self.staked = {}
-        self.aprs = self._get_aprs()  # Dynamic
-        self.latency_mode = os.getenv('LATENCY_MODE', 'laptop').lower()
-        self.order_executor = OrderExecutor()  # For buy
+        self.aprs = self._get_aprs()                # Dynamic
+        self.order_executor = OrderExecutor()       # For buy/sell
+        self.buffer_pct = Decimal('0.20')           # 20% idle buffer for buys
         self.logger = logging.getLogger(__name__)
 
     def _get_aprs(self):
@@ -24,21 +24,11 @@ class StakingManager:
             best_exchange = None
             for name, ex in self.exchanges.items():
                 try:
-                    staking_info = ex.fetch_staking_rewards()  # ccxt or SDK method
+                    staking_info = ccxt[name]().fetch_staking_rewards()  # ccxt or SDK
                     apr = Decimal(str(staking_info.get(coin, {}).get('apr', 0.0)))
                     if apr > max_apr:
                         max_apr = apr
                         best_exchange = name
-                    if name == 'coinbase' and coin == 'USDC':
-                        apr = Decimal('3.50')  # From research, or fetch
-                        if apr > max_apr:
-                            max_apr = apr
-                            best_exchange = name
-                    if name == 'kraken' and coin == 'USDC':  # GUSD or USDC
-                        apr = Decimal('4.75')  # From research, bonded
-                        if apr > max_apr:
-                            max_apr = apr
-                            best_exchange = name
                 except:
                     continue
             aprs[coin] = {'apr': max_apr, 'exchange': best_exchange}
@@ -74,12 +64,14 @@ class StakingManager:
             return False
 
     def find_best_seat_warmers(self, idle_amount: Decimal, from_signals: bool = False):
-        """Find highest APR coins/exchanges for idle/empty positions, stake."""
+        """Find highest APR coins/exchanges for idle/empty positions, stake (buy if not held)."""
         sorted_aprs = sorted(self.aprs.items(), key=lambda x: x[1]['apr'], reverse=True)
         for coin, info in sorted_aprs:
             if len(self.staked) < self.slots:
-                self.stake(coin, idle_amount)
-                break  # Stake one for simplicity
+                stake_amount = idle_amount * (
+                    Decimal('0.80') if from_signals else Decimal('1.0'))  # Buffer 20% for signals buys
+                self.stake(coin, stake_amount)
+                break
 
     def allocate(self, amount: Decimal):
         for coin in self.coins:
@@ -88,26 +80,9 @@ class StakingManager:
             stake_amount = amount / Decimal(len(self.coins))
             self.stake(coin, stake_amount)
 
-    def stake_coin(self, ex, coin, amount):
-        if ex.id == 'kraken':
-            # Kraken staking endpoint
-            headers = ex.sign('/0/private/Stake', 'post', {}, {'asset': coin, 'amount': str(amount)})
-            resp = requests.post('https://api.kraken.com/0/private/Stake', data={'asset': coin, 'amount': str(amount)}, headers=headers)
-            log(f"✅ Staked {amount} {coin} on Kraken")
-            return resp.json()
-        elif ex.id == 'binanceus':
-            ex.private_post_sapi_v1_simple_earn_flexible_subscribe({'asset': coin, 'amount': str(amount)})
-            log(f"✅ Staked {amount} {coin} on BinanceUS")
-            return True
-        elif 'coinbase' in ex.id:
-            # Coinbase staking placeholder (use if API supports)
-            log(f"✅ Staked {amount} {coin} on Coinbase")
-            return True
-        return False
-
     def unstake(self, coin, amount: Decimal = None):
         if coin not in self.staked:
-            self.logger.error(f"⚠️ No staking for {coin}")
+            self.logger.error(f"No staking for {coin}")
             return False
         amount = amount or self.staked[coin]
         ex = self.exchanges[self.aprs[coin]['exchange']]
@@ -117,6 +92,10 @@ class StakingManager:
             if self.staked[coin] <= Decimal('0'):
                 del self.staked[coin]
             self.logger.info(f"✅ Unstaked {amount.quantize(Decimal('0.00'))} {coin} from {self.aprs[coin]['exchange']}")
+            # Sell if needed (e.g., on signal)
+            self.order_executor.execute_arbitrage(sell_exchange=ex.name, buy_exchange=None, sell_price=...,
+                                                  symbol=coin + '/USDT', position_size=amount,
+                                                  expected_profit=Decimal('0'))  # Sell time-sensitive
             return True
         except Exception as e:
             self.logger.error(f"❌ Unstaking failed: {e}")
