@@ -1,3 +1,31 @@
+Currently 3 branches: Quant_bot_clean is a hot mess! Quant_bot_final is a connected slavaged version, QB is the branch we will work on to do all this!
+
+I searched GitHub and broader web sources for open source cryptocurrency arbitrage bots, focusing on cross-exchange arbitrage, Python implementations, and any that align with your strategy (US-compliant exchanges, dynamic data fetching, official SDKs over CCXT, low-transfer or no-transfer preference, staking integration, or hexagonal/clean architecture).
+Key findings (most relevant first):
+
+https://github.com/notlelouch/ArbiBot
+High-performance cross-exchange arbitrage bot. Monitors price discrepancies across multiple exchanges and executes trades. Similar to your Q-Bot focus on cross-exchange opportunities, but uses CCXT (not official SDKs) and does not emphasize dynamic API-first fetching of fees/balances/yields.
+https://github.com/nelso0/barbotine-arbitrage-bot
+Pure Python, CCXT-based cross-exchange arbitrage bot that explicitly avoids transfers between exchanges (operates opportunistically without moving funds). Closest match to your "no-transfer preferred" logic (via triangular/intra-exchange conversions first). No staking or hedging, static configs.
+https://github.com/fendouai/ArbitrageBot (and linked repos like Peregrine)
+Collection of arbitrage detectors and bots, some focused on Bitcoin cross-exchange. Includes opportunity scanners similar to your scanner.py. Mostly CCXT or custom REST.
+Freqtrade
+Popular general crypto trading bot (not purely arbitrage). Supports many exchanges, WebSockets, dynamic strategies, but not hexagonal architecture or strict official SDK usage. Has staking-like features in some strategies.
+Jesse
+Advanced Python trading framework. Clean architecture, backtesting, live trading. Not arbitrage-specific, but modular and could be adapted.
+OctoBot (mentioned in lists)
+Modular open-source bot with arbitrage channels/plugins.
+
+Overall Comparison to Your Project
+No exact match found for your combination: hexagonal architecture + strict official SDKs (binance-connector-python, python-kraken-sdk, coinbase-advanced-py, etc.) + fully dynamic/API-first (live fetch fees, balances, staking yields, network costs) + integrated staking/hedging + TradingView signal driven modes.
+Most bots rely heavily on CCXT for unification (your project is deliberately moving away from it).
+Many hardcode configs or use static lists (opposite your refactoring goal).
+Your emphasis on zero-transfer priority (via conversion.py), dynamic routing, and US-regulated exchanges (Binance.US + Coinbase variants) is unique.
+These can serve as reference for arbitrage scanning loops (Q.py style) and opportunity calculation, but your refactored version will be more adaptive and maintainable.
+
+
+
+
 last updated 1.23.26 16:00-----------
 
 Project Goal & Hexagonal Refactor Instructions”). This captures exactly what we are trying to achieve, stays 100% faithful to your original strategy (no deviations), and gives any future AI the precise context to continue helping you.
