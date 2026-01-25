@@ -1,4 +1,4 @@
-Currently 3 branches: Quant_bot_clean is a hot mess! Quant_bot_final is a connected slavaged version, QB is the branch we will work on to do all this!
+CURRENT STATUS: Currently 3 branches: Quant_bot_clean is a hot mess! Quant_bot_final is a connected slavaged RESTORED version BUT WITH HARD FIXED VALUES, QB is POOR RUSHED ATTEMPT AT FIXING IT!
 
 I searched GitHub and broader web sources for open source cryptocurrency arbitrage bots, focusing on cross-exchange arbitrage, Python implementations, and any that align with your strategy (US-compliant exchanges, dynamic data fetching, official SDKs over CCXT, low-transfer or no-transfer preference, staking integration, or hexagonal/clean architecture).
 Key findings (most relevant first):
@@ -16,7 +16,7 @@ Advanced Python trading framework. Clean architecture, backtesting, live trading
 OctoBot (mentioned in lists)
 Modular open-source bot with arbitrage channels/plugins.
 
-Overall Comparison to Your Project
+Overall Comparison to Project
 No exact match found for your combination: hexagonal architecture + strict official SDKs (binance-connector-python, python-kraken-sdk, coinbase-advanced-py, etc.) + fully dynamic/API-first (live fetch fees, balances, staking yields, network costs) + integrated staking/hedging + TradingView signal driven modes.
 Most bots rely heavily on CCXT for unification (your project is deliberately moving away from it).
 Many hardcode configs or use static lists (opposite your refactoring goal).
