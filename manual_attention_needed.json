@@ -1,0 +1,17 @@
+{
+  "timestamp": 1768001319.384279,
+  "priority": "MEDIUM",
+  "problem": "BNB fee discount below minimum",
+  "exchange": "Binance.US",
+  "current_bnb": 0.09859905,
+  "required_additional_bnb": 0.001400950000000012,
+  "current_btc": 0.02341492,
+  "current_usdt": 99.93208445,
+  "action": "Buy BNB on Binance.US or transfer assets to enable auto-fix",
+  "instructions": [
+    "Option 1: Buy approximately 0.001401 BNB directly on Binance.US",
+    "Option 2: Deposit BTC or USDT to Binance.US for bot to use",
+    "Option 3: Transfer assets from another exchange"
+  ],
+  "note": "Bot has BTC={btc_balance:.6f}, USDT=${usdt_balance:.2f}. Will try to auto-fix if assets available."
+}

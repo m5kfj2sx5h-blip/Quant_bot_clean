@@ -1,0 +1,88 @@
+2026-01-10 04:58:32.391 | ERROR    | ArbitrageBot         | system_orchestrator.py:297 | ⚠️  Monitoring initialization failed: name 'os' is not defined
+2026-01-10 04:58:38.937 | ERROR    | ArbitrageBot         | system_orchestrator.py:675 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 04:58:39.151 | ERROR    | ArbitrageBot         | system_orchestrator.py:675 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 04:58:39.859 | ERROR    | ArbitrageBot         | system_orchestrator.py:675 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 04:58:49.163 | ERROR    | ArbitrageBot         | system_orchestrator.py:675 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 04:58:49.358 | ERROR    | ArbitrageBot         | system_orchestrator.py:675 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 04:58:49.940 | ERROR    | ArbitrageBot         | system_orchestrator.py:675 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:35:37.615 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:35:37.861 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:35:38.614 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:35:50.511 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:35:50.707 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:35:51.267 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:36:03.310 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:36:03.508 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:36:04.072 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:36:15.918 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:36:16.112 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:36:16.664 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:36:28.717 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:36:28.918 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:36:29.491 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:36:41.291 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:36:41.489 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:36:42.088 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:36:53.944 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:36:54.144 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:36:54.726 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:37:06.541 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:37:06.741 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:37:07.257 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:37:19.058 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching kraken balance: 'float' object is not iterable
+2026-01-10 05:37:19.258 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching binance balance: 'float' object is not iterable
+2026-01-10 05:37:19.784 | ERROR    | ArbitrageBot         | system_orchestrator.py:693 | ❌ Error fetching coinbase balance: 'float' object is not iterable
+2026-01-10 05:52:54.222 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:53:06.827 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:53:19.629 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:53:32.334 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:53:44.955 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:53:57.579 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:54:10.245 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:54:23.112 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:54:35.689 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:54:48.299 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:54:58.491 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:55:08.577 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:55:18.683 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:55:29.111 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:55:39.191 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:55:49.446 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:55:59.547 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:56:09.698 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:56:19.752 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:56:29.877 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:56:39.979 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:56:50.165 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:57:00.231 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:57:10.469 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:57:20.571 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:57:30.597 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:57:40.658 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:57:50.842 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:58:02.861 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:58:12.972 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:58:23.060 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:58:33.157 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:58:43.267 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:58:53.350 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:59:03.412 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:59:13.584 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:59:23.696 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:59:34.037 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:59:44.155 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 05:59:54.246 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:00:04.332 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:00:15.045 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:00:25.594 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:00:35.808 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:00:45.958 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:00:56.036 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:01:06.270 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:01:16.364 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:01:26.407 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:01:36.537 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:01:46.688 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:01:57.113 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:02:07.258 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'
+2026-01-10 06:02:17.317 | ERROR    | ArbitrageBot         | system_orchestrator.py:805 | Inventory management error: 'ArbitrageBot' object has no attribute 'exchange_assets'

@@ -1,0 +1,51 @@
+[
+  {
+    "timestamp": "2026-01-07T17:18:59.910967",
+    "direction": "BUY COINBASE \u2192 SELL BINANCE",
+    "buy_exchange": "coinbase",
+    "sell_exchange": "binance",
+    "buy_price": 90996.0,
+    "sell_price": 91182.16,
+    "btc_amount": 0.0007979251835245506,
+    "buy_cost": 72.620055664,
+    "sell_revenue": 72.0339064,
+    "profit_usd": -0.6545814750799994,
+    "net_profit_pct": 0.10958042111741559,
+    "buy_fee_usd": 0.0,
+    "sell_fee_usd": 0.06843221108,
+    "status": "COMPLETED",
+    "order_type": "LIMIT"
+  },
+  {
+    "timestamp": "2026-01-08T04:23:43.825833",
+    "buy_exchange": "coinbase",
+    "sell_exchange": "binance",
+    "direction": "BUY COINBASE \u2192 SELL BINANCE",
+    "buy_price": 91152.0,
+    "sell_price": 91264.13,
+    "btc_amount": 0.005485343163068281,
+    "buy_cost": 499.9793610686,
+    "sell_revenue": 500.1274324,
+    "fees": 0.47512106078,
+    "profit_usd": -0.32704972938001003,
+    "net_profit_pct": 0.028014305774974393,
+    "buy_fee_credit_used": 2.9998761664116,
+    "sell_fee_credit_used": 0.0
+  },
+  {
+    "timestamp": "2026-01-08T04:23:48.258481",
+    "buy_exchange": "coinbase",
+    "sell_exchange": "binance",
+    "direction": "BUY COINBASE \u2192 SELL BINANCE",
+    "buy_price": 91150.01,
+    "sell_price": 91264.13,
+    "btc_amount": 0.003198802,
+    "buy_cost": 291.554210156,
+    "sell_revenue": 291.1325747,
+    "fees": 0.276575945965,
+    "profit_usd": -0.69821140196499,
+    "net_profit_pct": 0.0302002056829285,
+    "buy_fee_credit_used": 1.7493252609360002,
+    "sell_fee_credit_used": 0.0
+  }
+]

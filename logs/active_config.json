@@ -1,0 +1,136 @@
+{
+  "system": {
+    "max_cycles_per_day": 10000,
+    "emergency_stop_loss": -1000.0,
+    "daily_profit_target": 500.0,
+    "max_drawdown_percent": 5.0,
+    "name": "Professional Arbitrage Trading System",
+    "version": "2.0.0",
+    "shutdown_on_critical_error": true,
+    "max_uptime_hours": 168,
+    "auto_restart_on_failure": true
+  },
+  "exchanges": {
+    "enabled": [
+      "kraken",
+      "binance",
+      "coinbase"
+    ],
+    "timeout_seconds": 30,
+    "retry_attempts": 3,
+    "rate_limit_buffer_ms": 100,
+    "connection_check_interval": 60,
+    "max_concurrent_requests": 10
+  },
+  "trading": {
+    "max_concurrent_trades": 2,
+    "cooldown_after_loss_seconds": 60,
+    "position_sizing_mode": "dynamic",
+    "risk_per_trade_percent": 1.0,
+    "cooldown_after_success_seconds": 10,
+    "max_position_size_usd": 5000.0,
+    "min_position_size_usd": 10.0,
+    "profit_taking_multiplier": 1.5,
+    "max_trades_per_hour": 20,
+    "max_trades_per_day": 100,
+    "require_positive_edge": true,
+    "min_profit_threshold_usd": 0.5,
+    "slippage_tolerance_percent": 0.1
+  },
+  "monitoring": {
+    "health_check_interval": 300,
+    "metrics_report_interval": 60,
+    "alert_on_api_error_rate": 0.3,
+    "detailed_report_interval": 3600,
+    "alert_on_memory_growth_mb": 10,
+    "alert_on_high_cpu_percent": 80,
+    "alert_on_slow_cycle_time": 2.0,
+    "performance_sample_size": 100,
+    "telemetry_enabled": true
+  },
+  "arbitrage": {
+    "min_spread_percent_high_latency": 0.3,
+    "min_spread_percent_low_latency": 0.5,
+    "max_spread_for_market_order": 1.0,
+    "require_multiple_confirmations": true,
+    "price_deviation_tolerance": 0.05,
+    "volume_requirement_percent": 0.1,
+    "cross_exchange_validation": true
+  },
+  "inventory": {
+    "min_btc_per_exchange": 0.001,
+    "min_stable_per_exchange": 1500.0,
+    "min_bnb_for_binance": 0.1,
+    "rebalance_buffer_percent": 5.0,
+    "max_auto_rebalance_usd": 1000.0,
+    "cooldown_between_rebalances": 300,
+    "prioritize_fee_tokens": true
+  },
+  "market_intelligence": {
+    "auction_analysis_enabled": true,
+    "market_phase_detection": true,
+    "volume_profile_analysis": true,
+    "sentiment_analysis": true,
+    "macro_signal_detection": true,
+    "confidence_threshold": 0.6,
+    "context_history_size": 1000,
+    "pattern_recognition": true
+  },
+  "data": {
+    "use_data_hub": true,
+    "websocket_enabled": true,
+    "rest_fallback_enabled": true,
+    "data_validation": true,
+    "price_refresh_interval": 1.0,
+    "order_book_depth": 20,
+    "historical_data_points": 100,
+    "cache_enabled": true,
+    "cache_ttl_seconds": 30
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_to_file": true,
+    "log_to_console": true,
+    "max_log_size_mb": 10,
+    "log_backup_count": 10,
+    "separate_error_logs": true,
+    "metrics_logging": true,
+    "audit_trail": true
+  },
+  "recovery": {
+    "error_cooldown_seconds": 60.0,
+    "mode_switch_cooldown": 300.0,
+    "max_consecutive_errors": 5,
+    "circuit_breaker_enabled": true,
+    "graceful_degradation": true,
+    "auto_healing": true,
+    "fallback_strategies": true
+  },
+  "optimization": {
+    "adaptive_cycle_timing": true,
+    "dynamic_position_sizing": true,
+    "market_regime_adaptation": true,
+    "latency_optimization": true,
+    "resource_usage_optimization": true,
+    "learning_enabled": true,
+    "performance_baseline_update": true
+  },
+  "notifications": {
+    "enable_alerts": true,
+    "alert_channels": [
+      "log",
+      "file"
+    ],
+    "critical_alert_threshold": 0.8,
+    "daily_summary": true,
+    "trade_execution_alerts": true,
+    "system_status_alerts": true
+  },
+  "backup": {
+    "config_backup": true,
+    "state_persistence": true,
+    "auto_backup_interval": 3600,
+    "max_backup_files": 10,
+    "backup_rotation": true
+  }
+}

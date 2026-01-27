@@ -1,0 +1,28 @@
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              | ✅ Configuration loaded from config/bot_config.json
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              | 🔄 Initializing system components...
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              | ✅ Unified DataFeed initialized
+2026-01-10 21:55:56 | ERROR    | ArbitrageBot.None              | ❌ Fatal error in main loop: 'list' object has no attribute 'get'
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              | 🛑 Initiating graceful system shutdown...
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              | ✅ Data feed stopped
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              | ======================================================================
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              | 📊 SESSION SUMMARY:
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              |    Duration: 0.00 hours
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              |    Total Cycles: 0
+2026-01-10 21:55:56 | INFO     | ArbitrageBot.None              |    Total Trades: 0
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              | ✅ Configuration loaded from config/bot_config.json
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              | 🔄 Initializing system components...
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              | ✅ Unified DataFeed initialized
+2026-01-10 22:10:10 | ERROR    | ArbitrageBot.None              | ❌ Fatal error in main loop: 'list' object has no attribute 'get'
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              | 🛑 Initiating graceful system shutdown...
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              | ✅ Data feed stopped
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              | ======================================================================
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              | 📊 SESSION SUMMARY:
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              |    Duration: 0.00 hours
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              |    Total Cycles: 0
+2026-01-10 22:10:10 | INFO     | ArbitrageBot.None              |    Total Trades: 0
+2026-01-10 22:48:20 | INFO     | ArbitrageBot.None              | ✅ Configuration loaded from config/bot_config.json
+2026-01-10 22:48:20 | INFO     | ArbitrageBot.None              | 🔄 Initializing system components...
+2026-01-10 22:48:20 | INFO     | ArbitrageBot.None              | ✅ Unified DataFeed initialized
+2026-01-10 22:48:20 | ERROR    | ArbitrageBot.None              | ❌ Fatal error in main loop: 'list' object has no attribute 'get'
+2026-01-10 22:48:20 | INFO     | ArbitrageBot.None              | 🛑 Initiating graceful system shutdown...
+2026-01-10 22:48:20 | INFO     | ArbitrageBot.None              | ✅ Data feed stopped

@@ -1,0 +1,21 @@
+{
+  "timestamp": 1767991713.8428428,
+  "trades": [
+    {
+      "timestamp": 1767991713.8428328,
+      "problem": {
+        "exchange": "binance",
+        "currency": "BNB",
+        "current": 0.00775562,
+        "required": 0.1,
+        "deficit": 0.09224438,
+        "details": "Fee discount token low"
+      },
+      "instructions": [
+        "MANUAL ACTION REQUIRED:",
+        "1. Deposit at least 0.092244 BNB to your Binance.US account",
+        "2. Or, buy 0.092244 BNB with USDT on Binance.US (current BNB balance: 0.007756)"
+      ]
+    }
+  ]
+}

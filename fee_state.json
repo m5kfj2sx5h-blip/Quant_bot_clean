@@ -1,0 +1,36 @@
+{
+  "last_reset_date": "2026-01-07",
+  "exchanges": {
+    "binance": {
+      "discount_active": true,
+      "discount_type": "BNB_PAYMENT",
+      "standard_taker": 0.001,
+      "discounted_taker": 0.00095,
+      "bnb_balance_check": true,
+      "notes": "5% BNB discount active",
+      "trades_with_discount": 0
+    },
+    "kraken": {
+      "discount_active": true,
+      "discount_type": "KRAKEN_PLUS",
+      "monthly_fee_credit_usd": 10000.0,
+      "fees_used_this_month_usd": 0.0,
+      "credit_remaining_usd": 10000.0,
+      "standard_taker": 0.0026,
+      "discounted_taker": 0.0,
+      "notes": "Kraken+ Active: $10k/month free",
+      "last_fee_check": null
+    },
+    "coinbase": {
+      "discount_active": true,
+      "discount_type": "COINBASE_ONE",
+      "monthly_fee_credit_usd": 500.0,
+      "fees_used_this_month_usd": 4.7492014273476,
+      "credit_remaining_usd": 495.2507985726524,
+      "standard_taker": 0.006,
+      "discounted_taker": 0.0,
+      "notes": "Coinbase One: $500/month free",
+      "last_fee_check": null
+    }
+  }
+}

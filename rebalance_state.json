@@ -1,0 +1,16 @@
+{
+  "timestamp": 1767923093.794724,
+  "trades": [
+    {
+      "exchange": "coinbase",
+      "symbol": "BTC/USDC",
+      "side": "buy",
+      "btc_amount": 0.0012341535824885149,
+      "cost": 112.133676496,
+      "order_id": "509e8a83-c543-4612-b7f7-78efa81cb239",
+      "timestamp": 1767923093.7945259
+    }
+  ],
+  "total_btc": 0.0012341535824885149,
+  "total_cost": 112.133676496
+}
