@@ -10,7 +10,7 @@ from core.auction import AuctionContextModule
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv('config/.env')
 
 logger = logging.getLogger(__name__)
 

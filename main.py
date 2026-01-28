@@ -12,7 +12,7 @@ from typing import Dict, Any
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv('config/.env')
 
 from adapters.data.feed import DataFeed
 from manager.scanner import MarketContext, ArbitrageAnalyzer

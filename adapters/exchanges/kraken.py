@@ -6,7 +6,7 @@ from domain.values import Price, Amount
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv('config/.env')
 
 class KrakenAdapter:
     def __init__(self):

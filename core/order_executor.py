@@ -5,7 +5,7 @@ from decimal import Decimal, ROUND_DOWN
 from core.profit import calculate_net_profit, estimate_slippage
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv('config/.env')
 
 class OrderExecutor:
     def __init__(self, config: Dict, logger: logging.Logger, exchanges: Dict, persistence_manager=None, fee_manager=None, risk_manager=None):

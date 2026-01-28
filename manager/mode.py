@@ -6,7 +6,7 @@ from domain.entities import TradingMode, MacroSignal
 from typing import Optional, Any
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv('config/.env')
 
 logger = logging.getLogger(__name__)
 

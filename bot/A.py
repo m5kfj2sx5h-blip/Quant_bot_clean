@@ -6,7 +6,7 @@ from datetime import datetime
 from collections import OrderedDict
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv('config/.env')
 
 logger = logging.getLogger(__name__)
 

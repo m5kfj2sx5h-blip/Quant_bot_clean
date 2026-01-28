@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv('config/.env')
 
 logger = logging.getLogger(__name__)
 

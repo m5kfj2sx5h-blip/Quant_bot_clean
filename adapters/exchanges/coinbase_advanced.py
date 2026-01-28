@@ -8,7 +8,7 @@ import os
 import base64
 import re
 
-load_dotenv()
+load_dotenv('config/.env')
 
 class CoinbaseAdvancedAdapter:
     def _parse_pem_key(self, pem_key: str) -> str:

@@ -6,16 +6,12 @@ from domain.values import Price, Amount
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv('config/.env')
 
 class BinanceUSAdapter:
     def __init__(self):
         api_key = os.getenv('BINANCEUS_KEY')
         api_secret = os.getenv('BINANCEUS_SECRET')
-        if not api_key or not api_secret:
-            # Fail fast with clear message so we don't hit the API with empty creds
-            raise ValueError("BINANCEUS_KEY and BINANCEUS_SECRET must be set in the environment")
-
         # binance-connector expects api_key/api_secret (not key/secret)
         self.client = BinanceSpot(api_key=api_key, api_secret=api_secret, base_url='https://api.binance.us')
 

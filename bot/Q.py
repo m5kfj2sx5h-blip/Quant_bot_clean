@@ -10,7 +10,7 @@ from core.health_monitor import HealthMonitor
 from core.order_executor import OrderExecutor
 from manager.scanner import MarketContext
 
-load_dotenv()
+load_dotenv('config/.env')
 
 logger = logging.getLogger(__name__)
 

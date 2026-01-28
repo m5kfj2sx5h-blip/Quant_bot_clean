@@ -13,7 +13,7 @@ from manager.persistence import PersistenceManager
 from domain.aggregates import Portfolio
 from domain.entities import TradingMode
 
-load_dotenv()
+load_dotenv('config/.env')
 
 persistence_manager = PersistenceManager()
 

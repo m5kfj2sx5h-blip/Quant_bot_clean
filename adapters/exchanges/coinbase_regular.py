@@ -6,7 +6,7 @@ from domain.entities import Symbol
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv('config/.env')
 
 class CoinbaseRegularAdapter:
     def __init__(self):

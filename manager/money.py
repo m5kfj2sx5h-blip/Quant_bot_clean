@@ -9,7 +9,7 @@ from utils.logger import get_logger
 from dotenv import load_dotenv
 import time
 
-load_dotenv()
+load_dotenv('config/.env')
 
 logger = get_logger(__name__)
 

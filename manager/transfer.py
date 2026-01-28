@@ -5,7 +5,7 @@ from core.health_monitor import HealthMonitor
 from manager.registry import MarketRegistry
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv('config/.env')
 
 logger = get_logger(__name__)
 
