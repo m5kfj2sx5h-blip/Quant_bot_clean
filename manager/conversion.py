@@ -74,16 +74,16 @@ class ConversionManager:
                 self.logger.warning(f"No triangular route for {asset} (deviation: {float(deviation)*100:.1f}%) - manual transfer may be needed")
         return False
 
-    def update_capital_mode(self, drift_data: List[tuple], total_stablecoins: Decimal):
+    def update_capital_mode(self, drift_data: List[tuple], total_stablecoins: Decimal, bottleneck_threshold: Decimal = Decimal('1500')):
         if not drift_data:
             max_deviation = Decimal('0')
         else:
             max_deviation = max((dev for _, dev in drift_data), default=Decimal('0'))
-        if max_deviation >= self.drift_threshold or total_stablecoins < Decimal('1500'):
+        if max_deviation >= self.drift_threshold or total_stablecoins < bottleneck_threshold:
             self.capital_mode = "bottlenecked"
         else:
             self.capital_mode = "balanced"
-        self.logger.info(f"Capital mode: {self.capital_mode} (max drift {float(max_deviation)*100:.1f}%, stables ${float(total_stablecoins):.0f})")
+        self.logger.info(f"Capital mode: {self.capital_mode} (max drift {float(max_deviation)*100:.1f}%, stables ${float(total_stablecoins):.0f}, threshold ${float(bottleneck_threshold):.0f})")
 
     def get_best_conversion_route(self, from_asset: str, to_asset: str, exchange: str, books: Dict) -> Optional[Dict]:
         direct_pair = f"{from_asset}-{to_asset}"

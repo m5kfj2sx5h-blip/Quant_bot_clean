@@ -2,7 +2,8 @@ import asyncio
 import logging
 import time
 import statistics
-from typing import Dict, List, Callable
+from decimal import Decimal
+from typing import Dict, List, Callable, Any
 from adapters.data.ws import BinanceUSWebSocket, KrakenWebSocket, CoinbaseWebSocket, CoinbaseAdvancedWebSocket
 from manager.scanner import MarketContext, AuctionState, MarketPhase
 from core.auction import AuctionContextModule
@@ -15,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 class DataFeed:
     """ UNIFIED DATA ACQUISITION LAYER - WEB SOCKET ONLY """
-    def __init__(self, config: Dict, main_logger: logging.Logger):
+    def __init__(self, config: Dict, main_logger: logging.Logger, registry: Any = None):
         self.config = config
         self.logger = main_logger
+        self.registry = registry
         self.exchanges = {}
         self.price_data = {}
         self.market_contexts = {}
@@ -199,19 +201,23 @@ class DataFeed:
                 bids = data.get('bids', [])
                 asks = data.get('asks', [])
                 if bids and asks:
-                    best_bid = float(bids[0][0]) if bids[0] else None
-                    best_ask = float(asks[0][0]) if asks[0] else None
-                    if best_bid and best_ask:
-                        if symbol not in self.price_data:
-                            self.price_data[symbol] = {}
-                        self.price_data[symbol][exchange] = {
-                            'bid': best_bid,
-                            'ask': best_ask,
-                            'bids': bids[:5],
-                            'asks': asks[:5],
-                            'timestamp': data.get('timestamp', time.time())
-                        }
-                        last_price = (best_bid + best_ask) / 2
+                        best_bid = Decimal(str(bids[0][0])) if bids[0] else None
+                        best_ask = Decimal(str(asks[0][0])) if asks[0] else None
+                        if best_bid and best_ask:
+                            if symbol not in self.price_data:
+                                self.price_data[symbol] = {}
+                            self.price_data[symbol][exchange] = {
+                                'bid': best_bid,
+                                'ask': best_ask,
+                                'bids': [{'price': Decimal(str(p[0])), 'amount': Decimal(str(p[1]))} for p in bids[:5]],
+                                'asks': [{'price': Decimal(str(p[0])), 'amount': Decimal(str(p[1]))} for p in asks[:5]],
+                                'timestamp': data.get('timestamp', time.time())
+                            }
+                            # Push to Registry for 0ms access by other components
+                            if self.registry:
+                                self.registry.update_book(exchange, symbol, self.price_data[symbol][exchange])
+                            
+                            last_price = (best_bid + best_ask) / Decimal('2')
                         self.update_market_context(symbol, exchange, bids, asks, last_price)
                 if exchange in self.connection_health:
                     self.connection_health[exchange]['status'] = 'connected'

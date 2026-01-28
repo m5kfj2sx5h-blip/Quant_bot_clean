@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 from domain.entities import TradingMode, MacroSignal
+from typing import Optional, Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,7 +11,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class ModeManager:
-    def __init__(self, portfolio: 'Portfolio', tradingview_webhook_secret: str):
+    def __init__(self, portfolio: Any, tradingview_webhook_secret: str):
         self.portfolio = portfolio
         self.tradingview_secret = tradingview_webhook_secret
         self.current_mode = TradingMode.BTC_MODE
@@ -22,21 +23,36 @@ class ModeManager:
             if not self._verify_signature(signal_data):
                 logger.error("Invalid TradingView webhook signature")
                 return False
-            mode = TradingMode(signal_data['mode'])
-            confidence = Decimal(str(signal_data['confidence']))
+            
+            # Allow strings like 'btc_mode' or 'btc'
+            mode_input = signal_data['mode'].lower()
+            if mode_input == 'btc':
+                mode = TradingMode.BTC_MODE
+            elif mode_input == 'gold':
+                mode = TradingMode.GOLD_MODE
+            else:
+                mode = TradingMode(mode_input)
+
+            confidence = Decimal(str(signal_data.get('confidence', 1.0)))
             if confidence < Decimal('0.80'):
                 logger.warning(f"Confidence too low: {confidence}")
                 return False
+            
             if not self._can_switch_macro():
                 logger.warning(f"Macro switch blocked: last switch {self.last_switch_date}, cooldown: {self.macro_cycle_duration}")
                 return False
+
             macro_signal = MacroSignal(timestamp=datetime.utcnow(), mode=mode, confidence=confidence, source="tradingview")
-            success = self.portfolio.update_macro_signal(macro_signal)
+            
+            success = True
+            if self.portfolio:
+                success = self.portfolio.update_macro_signal(macro_signal)
+            
             if success:
                 self.current_mode = mode
                 self.last_switch_date = datetime.utcnow()
                 logger.critical(f"=== MACRO SWITCH: {mode.value.upper()} ===")
-                if mode == TradingMode.GOLD_MODE:
+                if mode == TradingMode.GOLD_MODE and self.portfolio:
                     await self._calculate_gold_conversion_target()
                 return success
         except Exception as e:

@@ -5,7 +5,6 @@ import hashlib
 import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from decimal import Decimal
 from typing import Callable, Optional, Dict
 from dotenv import load_dotenv
 

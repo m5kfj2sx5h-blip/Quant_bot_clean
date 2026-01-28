@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from decimal import Decimal
 from typing import Dict, Optional
 from datetime import datetime
@@ -11,10 +12,13 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class GBot:
-    def __init__(self, config: dict, exchanges: Dict, fee_manager=None):
+    def __init__(self, config: dict, exchanges: Dict, fee_manager=None, market_registry=None, portfolio=None, persistence_manager=None):
         self.config = config
         self.exchanges = exchanges
         self.fee_manager = fee_manager
+        self.market_registry = market_registry
+        self.portfolio = portfolio
+        self.persistence_manager = persistence_manager
         gold_config = config.get('gold', {})
         self.sweep_profit_pct = Decimal(str(gold_config.get('sweep_profit_pct', 15))) / 100
         self.max_sweeps_per_month = gold_config.get('max_sweeps_per_month', 2)
@@ -26,8 +30,19 @@ class GBot:
         self.total_paxg_accumulated = Decimal('0')
         self.total_paxg_swept = Decimal('0')
         self.running = False
-        self.profit_file = Path('logs/gold_profits.json')
-        self._load_state()
+        
+        if not self.persistence_manager:
+            self.profit_file = Path('logs/gold_profits.json')
+            self._load_state()
+        else:
+            # G-Bot recovery from SQLite
+            last_state = self.persistence_manager.load_last_state()
+            if last_state:
+                self.total_paxg_accumulated = Decimal(str(last_state.get('gold_accumulated_cycle', '0')))
+                # Note: sweeps_this_month would need a trades query, but for now we'll keep it simple
+                # or add a dedicated gbot_state table if month reset is critical.
+                # Actually, we can just use the portfolio state for accumulated gold.
+                
         logger.info(f"🏆 G-Bot initialized. Sweep: {float(self.sweep_profit_pct)*100}% of profits, Max: {self.max_sweeps_per_month}/month")
 
     def _load_state(self):
@@ -56,7 +71,11 @@ class GBot:
 
     def _check_month_reset(self):
         current_month = datetime.now().strftime('%Y-%m')
-        if self.last_sweep_month != current_month:
+        
+        if self.persistence_manager:
+            self.sweeps_this_month = self.persistence_manager.get_sweeps_count(current_month)
+            self.last_sweep_month = current_month
+        elif self.last_sweep_month != current_month:
             self.sweeps_this_month = 0
             self.last_sweep_month = current_month
             self._save_state()
@@ -73,6 +92,20 @@ class GBot:
             if exchange:
                 exchange.place_order('PAXG/USDT', 'buy', paxg_amount, best_price)
                 self.total_paxg_accumulated += paxg_amount
+                
+                if self.portfolio:
+                    self.portfolio.gold_accumulated_this_cycle = self.total_paxg_accumulated
+                
+                if self.persistence_manager:
+                    self.persistence_manager.save_trade({
+                        'symbol': 'PAXG',
+                        'type': 'GOLD_ACCUMULATE',
+                        'buy_exchange': best_exchange,
+                        'buy_price': best_price,
+                        'amount': paxg_amount,
+                        'net_profit_usd': 0
+                    })
+                
                 self._save_state()
                 return True
         except Exception as e:
@@ -127,6 +160,17 @@ class GBot:
                         logger.info(f"Sweeping {paxg_to_sweep:.6f} PAXG from {ex_name} to {self.cold_wallet}")
                         self.sweeps_this_month += 1
                         self.total_paxg_swept += paxg_to_sweep
+                        
+                        if self.persistence_manager:
+                            self.persistence_manager.save_trade({
+                                'symbol': 'PAXG',
+                                'type': 'GOLD_SWEEP',
+                                'sell_exchange': ex_name,
+                                'sell_price': price,
+                                'amount': paxg_to_sweep,
+                                'net_profit_usd': 0 # Sweep is transfer, not profit/loss
+                            })
+
                         self._save_state()
                         logger.info(f"Sweep complete. Sweeps this month: {self.sweeps_this_month}/{self.max_sweeps_per_month}")
                         return True
@@ -138,15 +182,21 @@ class GBot:
     def _find_best_paxg_price(self) -> tuple:
         best_exchange = None
         best_price = None
+        pair = 'PAXG/USDT'
         for ex_name, exchange in self.exchanges.items():
             try:
-                price = exchange.get_ticker_price('PAXG/USDT').value
+                # Instant Registry Lookup (VRAM Model)
+                book = self.market_registry.get_order_book(ex_name, pair) if self.market_registry else None
+                if book:
+                    price = Decimal(str(book.get('ask', book['asks'][0]['price'])))
+                else:
+                    price = exchange.get_ticker_price(pair).value
+                
                 if best_price is None or price < best_price:
                     best_price = price
                     best_exchange = ex_name
-                self.logger.info(f"Fetched PAXG price from API for {ex_name}")
             except Exception as e:
-                logger.debug(f"Error fetching PAXG price from {ex_name}: {e}")
+                logger.debug(f"Error fetching {pair} price from {ex_name}: {e}")
         return best_exchange, best_price
 
     def get_status(self) -> Dict:

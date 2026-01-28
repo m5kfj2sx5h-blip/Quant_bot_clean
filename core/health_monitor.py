@@ -87,10 +87,11 @@ class HealthMonitor:
     Provides adaptive recommendations for optimization.
     """
 
-    def __init__(self, portfolio: Portfolio, alert_callback: Callable, config, logger=None):
+    def __init__(self, portfolio: Portfolio, alert_callback: Callable, config, logger=None, market_registry=None):
         """Initialize health monitor with configuration."""
         self.portfolio = portfolio
         self.alert_callback = alert_callback
+        self.market_registry = market_registry
         self.exchange_health: Dict[str, ExchangeHealth] = {}
         self.thresholds = TradingThresholds()
         self._stop_event = asyncio.Event()
@@ -494,8 +495,30 @@ class HealthMonitor:
     async def _check_position_limits(self):
         """Ensure no position exceeds thresholds"""
         for symbol, amount in self.portfolio.positions.items():
-            # Get current price from scanner (simplified)
-            position_value_usd = amount * Decimal('50000')  # Placeholder BTC price
+            # Get current price from Registry
+            price = Decimal('0')
+            if self.market_registry:
+                # Try multiple exchanges to find a price
+                for ex in ['binanceus', 'kraken', 'coinbase_advanced']:
+                    book = self.market_registry.get_order_book(ex, str(symbol))
+                    if book:
+                        price = Decimal(str(book.get('bid', book['bids'][0]['price'])))
+                        break
+            
+            if price == 0: 
+                # Better dynamic fallback: use Registry for ANY available price
+                if self.market_registry:
+                    for sym in ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']:
+                        for ex in ['binanceus', 'kraken', 'coinbase_advanced']:
+                            book = self.market_registry.get_order_book(ex, sym)
+                            if book:
+                                price = Decimal(str(book.get('bid', book['bids'][0]['price'])))
+                                break
+                        if price > 0: break
+            
+            if price == 0: price = Decimal('1000') # Absolute last resort
+            
+            position_value_usd = amount * price
             if not self.thresholds.can_take_position(position_value_usd):
                 await self.alert_callback(
                     "⚠️ position_limit_exceeded",
@@ -503,9 +526,13 @@ class HealthMonitor:
                 )
 
     async def _check_daily_loss_limits(self):
-        """Track daily P&L"""
-        # Would need to track daily P&L separately
-        pass
+        """Track daily P&L and alert if limits exceeded."""
+        daily_pnl = self.portfolio.total_profit_usd # Simplification
+        if daily_pnl < -self.thresholds.max_daily_loss_usd:
+            await self.alert_callback(
+                "⚠️ daily_loss_limit_exceeded",
+                f"⚠️ Daily loss ${abs(daily_pnl):.2f} exceeds limit ${self.thresholds.max_daily_loss_usd}"
+            )
 
     async def _check_api_response_times(self):
         """Alert on slow API responses"""

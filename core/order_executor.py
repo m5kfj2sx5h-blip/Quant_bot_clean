@@ -8,10 +8,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class OrderExecutor:
-    def __init__(self, config: Dict, logger: logging.Logger, exchanges: Dict):
+    def __init__(self, config: Dict, logger: logging.Logger, exchanges: Dict, persistence_manager=None):
         self.config = config
         self.logger = logger
         self.exchanges = exchanges
+        self.persistence_manager = persistence_manager
         self.execution_history = []
         self.max_history_size = 100
         self.settings = {
@@ -101,6 +102,26 @@ class OrderExecutor:
         self.execution_history.append(trade_record)
         if len(self.execution_history) > self.max_history_size:
             self.execution_history.pop(0)
+
+        # Persistence to SQLite
+        if self.persistence_manager:
+            try:
+                db_record = {
+                    'symbol': symbol,
+                    'type': 'ARB_CROSS',
+                    'buy_exchange': buy_exchange,
+                    'sell_exchange': sell_exchange,
+                    'buy_price': actual_buy_price,
+                    'sell_price': actual_sell_price,
+                    'amount': actual_buy_amount,
+                    'fee_usd': buy_fee + sell_fee,
+                    'net_profit_usd': net_profit,
+                    'execution_time_ms': execution_time * 1000
+                }
+                self.persistence_manager.save_trade(db_record)
+            except Exception as e:
+                self.logger.error(f"Failed to persist trade to SQLite: {e}")
+
         self.logger.info(f"ARBITRAGE EXECUTION COMPLETE: Net Profit ${net_profit:.4f}")
         return True
 

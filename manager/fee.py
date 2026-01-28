@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal
 from typing import Dict, Optional
 from domain.entities import Symbol, FeeStructure
+from manager.registry import MarketRegistry
 from dotenv import load_dotenv
 import os
 import time
@@ -11,9 +12,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class FeeManager:
-    def __init__(self, config: dict, exchanges: Dict):
+    def __init__(self, config: dict, exchanges: Dict, registry: MarketRegistry = None):
         self.config = config
         self.exchanges = exchanges
+        self.registry = registry
         self.fee_structures: Dict[str, FeeStructure] = {}
         self._cache = {}  # Memory cache
         self.cache_ttl = config.get('cache_ttl_minutes', 5) * 60

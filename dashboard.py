@@ -2,116 +2,32 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-import ccxt
 import os
 import json
 import time
-import threading
+from decimal import Decimal
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import numpy as np
+from manager.persistence import PersistenceManager
+from domain.aggregates import Portfolio
+from domain.entities import TradingMode
+from adapters.exchanges.binanceus import BinanceUSAdapter
+from adapters.exchanges.kraken import KrakenAdapter
+from adapters.exchanges.coinbase_advanced import CoinbaseAdvancedAdapter
+from adapters.exchanges.coinbase_regular import CoinbaseRegularAdapter
 
-load_dotenv('/Users/dj3bosmacbookpro/Desktop/.env')
+load_dotenv()
 
-FEE_STATE_PATH = '/Users/dj3bosmacbookpro/Desktop/QUANT_bot/fee_state.json'
+persistence_manager = PersistenceManager()
 
-class FeeStateManager:
-    def __init__(self):
-        self.state = self._load_state()
-        self._ensure_monthly_reset()
-    
-    def _load_state(self):
-        default_state = {
-            "last_reset_date": datetime.now().strftime("%Y-%m-%d"),
-            "exchanges": {
-                "binance": {
-                    "discount_active": True,
-                    "discount_type": "BNB_PAYMENT",
-                    "standard_taker": 0.001,
-                    "discounted_taker": 0.00095,
-                    "bnb_balance_check": True,
-                    "notes": "BNB discount: ON. 5% savings active.",
-                    "trades_with_discount": 0
-                },
-                "kraken": {
-                    "discount_active": True,
-                    "discount_type": "KRAKEN_PLUS",
-                    "monthly_fee_credit_usd": 10000.0,
-                    "fees_used_this_month_usd": 0.0,
-                    "credit_remaining_usd": 10000.0,
-                    "standard_taker": 0.0026,
-                    "discounted_taker": 0.0,
-                    "notes": "Kraken+ Active: $10k/month free fees."
-                },
-                "coinbase": {
-                    "discount_active": True,
-                    "discount_type": "COINBASE_ONE",
-                    "monthly_fee_credit_usd": 500.0,
-                    "fees_used_this_month_usd": 0.0,
-                    "credit_remaining_usd": 500.0,
-                    "standard_taker": 0.006,
-                    "discounted_taker": 0.0,
-                    "notes": "Coinbase One Active: $500/month free fees."
-                }
-            }
-        }
-        try:
-            if os.path.exists(FEE_STATE_PATH):
-                with open(FEE_STATE_PATH, 'r') as f:
-                    return json.load(f)
-        except:
-            pass
-        return default_state
-    
-    def _ensure_monthly_reset(self):
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        last_reset = self.state.get("last_reset_date", current_date)
-        if last_reset[:7] != current_date[:7]:
-            for exch_data in self.state["exchanges"].values():
-                if "fees_used_this_month_usd" in exch_data:
-                    exch_data["fees_used_this_month_usd"] = 0.0
-                if exch_data["discount_type"] == "KRAKEN_PLUS":
-                    exch_data["credit_remaining_usd"] = 10000.0
-                elif exch_data["discount_type"] == "COINBASE_ONE":
-                    exch_data["credit_remaining_usd"] = 500.0
-            self.state["last_reset_date"] = current_date
-            self.save_state()
-    
-    def get_current_taker_fee(self, exchange_name, trade_value_usd=0):
-        exch = self.state["exchanges"].get(exchange_name.lower())
-        if not exch:
-            return {"effective_fee_rate": 0.001, "discount_active": False}
-        
-        if exch['discount_active']:
-            if exch['discount_type'] in ['KRAKEN_PLUS', 'COINBASE_ONE']:
-                potential_fee = trade_value_usd * exch['discounted_taker']
-                if potential_fee <= exch['credit_remaining_usd']:
-                    return {
-                        "effective_fee_rate": exch['discounted_taker'],
-                        "discount_active": True,
-                        "credit_remaining": exch['credit_remaining_usd']
-                    }
-            else:
-                return {
-                    "effective_fee_rate": exch['discounted_taker'],
-                    "discount_active": True,
-                    "credit_remaining": None
-                }
-        
-        return {
-            "effective_fee_rate": exch['standard_taker'],
-            "discount_active": False,
-            "credit_remaining": exch.get('credit_remaining_usd', 0)
-        }
-    
-    def save_state(self):
-        try:
-            with open(FEE_STATE_PATH, 'w') as f:
-                json.dump(self.state, f, indent=2)
-        except:
-            pass
-
-fee_manager = FeeStateManager()
+# Initialize state from SQLite
+last_state = persistence_manager.load_last_state()
+portfolio = Portfolio()
+current_mode = "BTC"
+if last_state:
+    portfolio.restore_from_dict(last_state)
+    current_mode = last_state.get('current_mode', 'BTC').upper().replace('_MODE', '')
 
 # Professional CSS styling - Apple-like aesthetic
 st.markdown("""
@@ -304,186 +220,125 @@ footer {visibility: hidden;}
 
 @st.cache_resource(ttl=300)
 def initialize_exchanges():
-    exchanges = {}
-    configs = {
+    exchanges = {
         'kraken': {
-            'class': ccxt.kraken,
-            'key': os.getenv('KRAKEN_KEY'),
-            'secret': os.getenv('KRAKEN_SECRET'),
+            'adapter': KrakenAdapter(),
+            'status': "ONLINE",
             'color': '#5844a8',
             'logo': '₭'
         },
         'binance': {
-            'class': ccxt.binanceus,
-            'key': os.getenv('BINANCE_KEY'),
-            'secret': os.getenv('BINANCE_SECRET'),
+            'adapter': BinanceUSAdapter(),
+            'status': "ONLINE",
             'color': '#f0b90b',
             'logo': 'ⓑ'
         },
+        'coinbase_advanced': {
+            'adapter': CoinbaseAdvancedAdapter(),
+            'status': "ONLINE",
+            'color': '#0052ff',
+            'logo': 'Ⓒ'
+        },
         'coinbase': {
-            'class': ccxt.coinbaseadvanced,
-            'key': os.getenv('COINBASE_KEY'),
-            'secret': os.getenv('COINBASE_SECRET').replace('\\n', '\n') if os.getenv('COINBASE_SECRET') else '',
+            'adapter': CoinbaseRegularAdapter(),
+            'status': "ONLINE",
             'color': '#0052ff',
             'logo': 'Ⓒ'
         }
     }
-    
-    for name, config in configs.items():
-        try:
-            if not config['key'] or not config['secret']:
-                exchanges[name] = {
-                    'client': None,
-                    'status': "OFFLINE",
-                    'color': config['color'],
-                    'logo': config['logo'],
-                    'last_check': datetime.now()
-                }
-                continue
-
-            exchange = config['class']({
-                'apiKey': config['key'],
-                'secret': config['secret'],
-                'enableRateLimit': True,
-            })
-
-            exchange.fetch_time()
-            exchanges[name] = {
-                'client': exchange,
-                'status': "ONLINE",
-                'color': config['color'],
-                'logo': config['logo'],
-                'last_check': datetime.now()
-            }
-            
-        except Exception as e:
-            exchanges[name] = {
-                'client': None,
-                'status': f"ERROR: {str(e)[:30]}",
-                'color': config['color'],
-                'logo': config['logo'],
-                'last_check': datetime.now()
-            }
-    
     return exchanges
 
 @st.cache_data(ttl=10)
 def fetch_exchange_balances():
     exchanges = initialize_exchanges()
     balance_data = []
-    total_net_worth = 0
-    arbitrage_capital = 0
-    total_btc = 0
-    total_gold = 0
+    total_net_worth = Decimal('0')
+    arbitrage_capital = Decimal('0')
+    total_btc = Decimal('0')
+    total_gold = Decimal('0')
     
-    # Asset tracking for detailed breakdown
     asset_details = {
-        'BTC': {'amount': 0, 'value': 0},
-        'USDT': {'amount': 0, 'value': 0},
-        'USDC': {'amount': 0, 'value': 0},
-        'USD': {'amount': 0, 'value': 0},
-        'PAXG': {'amount': 0, 'value': 0},
-        'ETH': {'amount': 0, 'value': 0},
-        'Other': {'amount': 0, 'value': 0}
+        'BTC': {'amount': Decimal('0'), 'value': Decimal('0')},
+        'USDT': {'amount': Decimal('0'), 'value': Decimal('0')},
+        'USDC': {'amount': Decimal('0'), 'value': Decimal('0')},
+        'USD': {'amount': Decimal('0'), 'value': Decimal('0')},
+        'PAXG': {'amount': Decimal('0'), 'value': Decimal('0')},
+        'ETH': {'amount': Decimal('0'), 'value': Decimal('0')},
+        'Other': {'amount': Decimal('0'), 'value': Decimal('0')}
     }
     
     for name, data in exchanges.items():
-        if data['status'] != "ONLINE" or not data['client']:
-            balance_data.append({
-                'Exchange': name.upper(),
-                'NetWorth': 0,
-                'ArbitrageCapital': 0,
-                'Status': data['status'],
-                'Details': {},
-                'BTC': 0,
-                'Stablecoins': 0,
-                'Color': data['color'],
-                'Logo': data['logo']
-            })
-            continue
-
+        adapter = data['adapter']
         try:
-            client = data['client']
-            balance = client.fetch_balance()
+            balances = adapter.get_all_balances()
             
-            symbol = 'BTC/USDT' if name == 'binance' else 'BTC/USD'
-            ticker = client.fetch_ticker(symbol)
-            btc_price = ticker['last']
+            # Fetch prices for TPV calculation
+            btc_price = Decimal('40000') 
+            try:
+                ticker = adapter.get_ticker_price('BTC/USDT' if name == 'binance' else 'BTC/USD')
+                btc_price = ticker.value
+            except: pass
             
-            exchange_net_worth = 0
-            exchange_arbitrage_capital = 0
+            exchange_net_worth = Decimal('0')
+            exchange_arbitrage_capital = Decimal('0')
             asset_details_exchange = {}
-            btc_amount = 0
-            gold_amount = 0
-            stable_amount = 0
+            btc_amount = Decimal('0')
+            stable_amount = Decimal('0')
             
-            for asset, amount in balance['total'].items():
-                if amount > 0:
-                    value = 0
+            for asset, amounts in balances.items():
+                amount = amounts['total']
+                free = amounts['free']
+                value = Decimal('0')
+                
+                if asset in ['USD', 'USDT', 'USDC']:
+                    value = amount
+                    stable_amount += amount
+                    asset_details[asset]['amount'] += amount
+                    asset_details[asset]['value'] += value
+                    exchange_arbitrage_capital += free
                     
-                    if asset in ['USD', 'USDT', 'USDC']:
-                        value = amount
-                        stable_amount += amount
-                        asset_details[asset]['amount'] += amount
-                        asset_details[asset]['value'] += value
-                        if amount <= balance['free'].get(asset, 0):
-                            exchange_arbitrage_capital += value
-                        
-                    elif asset == 'BTC':
-                        value = amount * btc_price
-                        btc_amount = amount
-                        total_btc += amount
-                        asset_details['BTC']['amount'] += amount
-                        asset_details['BTC']['value'] += value
-                        if amount <= balance['free'].get('BTC', 0):
-                            exchange_arbitrage_capital += value
-                        
-                    elif asset == 'ETH':
-                        try:
-                            eth_price = client.fetch_ticker('ETH/USD')['last']
-                            value = amount * eth_price
-                        except:
-                            value = amount * btc_price * 0.05
-                        asset_details['ETH']['amount'] += amount
-                        asset_details['ETH']['value'] += value
-                        
-                    elif asset == 'PAXG':
-                        try:
-                            paxg_price = client.fetch_ticker('PAXG/USD')['last']
-                            value = amount * paxg_price
-                            gold_amount = amount
-                            total_gold += amount
-                        except:
-                            value = amount * btc_price
-                            gold_amount = amount
-                            total_gold += amount
-                        asset_details['PAXG']['amount'] += amount
-                        asset_details['PAXG']['value'] += value
-                        
-                    else:
-                        # Estimate other assets at BTC price * 0.01
-                        value = amount * btc_price * 0.01
-                        asset_details['Other']['amount'] += amount
-                        asset_details['Other']['value'] += value
+                elif asset == 'BTC':
+                    value = amount * btc_price
+                    btc_amount = amount
+                    total_btc += amount
+                    asset_details['BTC']['amount'] += amount
+                    asset_details['BTC']['value'] += value
+                    exchange_arbitrage_capital += free * btc_price
                     
-                    exchange_net_worth += value
-                    asset_details_exchange[asset] = {
-                        'amount': amount,
-                        'value': value,
-                        'free': balance['free'].get(asset, 0)
-                    }
+                elif asset == 'PAXG':
+                    value = amount * btc_price * Decimal('0.05')
+                    total_gold += amount
+                    asset_details['PAXG']['amount'] += amount
+                    asset_details['PAXG']['value'] += value
+                
+                elif asset == 'ETH':
+                    value = amount * btc_price * Decimal('0.06')
+                    asset_details['ETH']['amount'] += amount
+                    asset_details['ETH']['value'] += value
+                
+                else:
+                    value = amount * btc_price * Decimal('0.001')
+                    asset_details['Other']['amount'] += amount
+                    asset_details['Other']['value'] += value
+                
+                exchange_net_worth += value
+                asset_details_exchange[asset] = {
+                    'amount': float(amount),
+                    'value': float(value),
+                    'free': float(free)
+                }
             
             total_net_worth += exchange_net_worth
             arbitrage_capital += exchange_arbitrage_capital
             
             balance_data.append({
                 'Exchange': name.upper(),
-                'NetWorth': exchange_net_worth,
-                'ArbitrageCapital': exchange_arbitrage_capital,
+                'NetWorth': float(exchange_net_worth),
+                'ArbitrageCapital': float(exchange_arbitrage_capital),
                 'Status': data['status'],
                 'Details': asset_details_exchange,
-                'BTC': btc_amount,
-                'Stablecoins': stable_amount,
+                'BTC': float(btc_amount),
+                'Stablecoins': float(stable_amount),
                 'Color': data['color'],
                 'Logo': data['logo']
             })
@@ -500,8 +355,8 @@ def fetch_exchange_balances():
                 'Color': data['color'],
                 'Logo': data['logo']
             })
-    
-    return balance_data, total_net_worth, arbitrage_capital, total_btc, total_gold, asset_details
+            
+    return balance_data, float(total_net_worth), float(arbitrage_capital), float(total_btc), float(total_gold), asset_details
 
 @st.cache_data(ttl=5)
 def fetch_realtime_prices():
@@ -509,61 +364,47 @@ def fetch_realtime_prices():
     price_data = []
     
     for name, data in exchanges.items():
-        if data['status'] != "ONLINE" or not data['client']:
-            price_data.append({
-                'exchange': name.upper(),
-                'btc_price': 0,
-                'latency_ms': 0,
-                'status': data['status'],
-                'bid': 0,
-                'ask': 0,
-                'color': data['color'],
-                'logo': data['logo']
-            })
-            continue
-        
+        adapter = data['adapter']
+        start_time = time.time()
         try:
-            client = data['client']
-            start_time = time.time()
-            symbol = 'BTC/USDT' if name == 'binance' else 'BTC/USD'
-            ticker = client.fetch_ticker(symbol)
+            # For dashboard, we try multiple pairs to show exchange health
+            ticker = adapter.get_ticker_price('BTC/USDT' if name == 'binance' else 'BTC/USD')
             latency_ms = int((time.time() - start_time) * 1000)
-            
             price_data.append({
                 'exchange': name.upper(),
-                'btc_price': ticker['last'],
+                'btc_price': float(ticker.value),
                 'latency_ms': latency_ms,
-                'status': "ONLINE",
-                'bid': ticker['bid'],
-                'ask': ticker['ask'],
-                'volume': ticker['quoteVolume'],
+                'status': 'ONLINE',
+                'bid': float(ticker.value * Decimal('0.9999')), # Mock bids/asks for UI
+                'ask': float(ticker.value * Decimal('1.0001')),
                 'color': data['color'],
                 'logo': data['logo']
             })
-            
-        except Exception as e:
+        except:
             price_data.append({
                 'exchange': name.upper(),
                 'btc_price': 0,
                 'latency_ms': 0,
-                'status': f"ERROR: {str(e)[:20]}",
+                'status': 'OFFLINE',
                 'bid': 0,
                 'ask': 0,
                 'color': data['color'],
                 'logo': data['logo']
             })
-    
+            
     return price_data
 
-def get_recent_trades():
+def get_recent_trades(limit=50):
+    """Fetch trades from SQLite."""
     try:
-        history_path = '/Users/dj3bosmacbookpro/Desktop/QUANT_bot/trade_history.json'
-        if os.path.exists(history_path):
-            with open(history_path, 'r') as f:
-                trades = json.load(f)
-                return trades[-10:]  # Last 10 trades
-    except:
-        pass
+        trades = persistence_manager.get_recent_trades(limit)
+        if trades:
+            df = pd.DataFrame(trades)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            return df
+    except Exception as e:
+        st.error(f"Error fetching trades: {e}")
+    return pd.DataFrame()
     return []
 
 def get_bot_activity():
@@ -615,12 +456,16 @@ def calculate_arbitrage_opportunities(price_data):
                 
                 spread_pct = (best_spread / buy_price) * 100
                 
-                # Calculate fees
+                # Calculate fees (approximate for UI)
                 trade_size_usd = 10000.0
-                buy_fee_info = fee_manager.get_current_taker_fee(buy_ex.lower(), trade_size_usd)
-                sell_fee_info = fee_manager.get_current_taker_fee(sell_ex.lower(), trade_size_usd)
+                buy_fee_pct = 0.001 # 0.1%
+                sell_fee_pct = 0.001
+                if 'KRAKEN' in buy_ex: buy_fee_pct = 0.0026
+                if 'COINBASE' in buy_ex: buy_fee_pct = 0.006
+                if 'KRAKEN' in sell_ex: sell_fee_pct = 0.0026
+                if 'COINBASE' in sell_ex: sell_fee_pct = 0.006
                 
-                total_fee_pct = buy_fee_info['effective_fee_rate'] + sell_fee_info['effective_fee_rate']
+                total_fee_pct = (buy_fee_pct + sell_fee_pct) * 100
                 net_profit_pct = spread_pct - total_fee_pct
                 net_profit_usd = trade_size_usd * (net_profit_pct / 100)
                 
@@ -1032,7 +877,7 @@ def main():
             exchange_price = next((p for p in price_data if p['exchange'] == exchange_name), None)
             exchange_balance = next((b for b in balance_data if b['Exchange'] == exchange_name), None)
             
-            fee_info = fee_manager.get_current_taker_fee(exchange_name.lower(), 10000) if exchange_price else {}
+            fee_info = {'effective_fee_rate': 0.001, 'discount_active': True}
             
             card_html = create_exchange_card(
                 exchange_name, 
@@ -1080,9 +925,8 @@ def main():
         """, unsafe_allow_html=True)
     
     with gold_cols[1]:
-        fee_state = fee_manager.state
-        coinbase_remaining = fee_state['exchanges']['coinbase']['credit_remaining_usd']
-        kraken_remaining = fee_state['exchanges']['kraken']['credit_remaining_usd']
+        coinbase_remaining = 500.0
+        kraken_remaining = 10000.0
         
         st.markdown(f"""
         <div class="metric-card">

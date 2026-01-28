@@ -7,6 +7,14 @@ from typing import Optional
 
 
 @dataclass(frozen=True)
+class Amount:
+    value: Decimal
+    asset: str
+
+    def __str__(self):
+        return str(self.value)
+
+@dataclass(frozen=True)
 class Price:
     value: Decimal
     exchange: str

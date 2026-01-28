@@ -1,30 +1,39 @@
-from utils.utils import log
+from utils.logger import get_logger
 from decimal import Decimal
 import os
 from core.health_monitor import HealthMonitor
+from manager.registry import MarketRegistry
 from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = get_logger(__name__)
+
 class TransferManager:
-    def __init__(self, exchanges, stable, auto):
+    def __init__(self, exchanges, stable, auto, registry: MarketRegistry = None):
         self.exchanges = exchanges
         self.stable = stable
         self.auto = auto
+        self.registry = registry
         self.latency_mode = os.getenv('LATENCY_MODE', 'laptop').lower()
-        self.health = HealthMonitor()
+        self.health = HealthMonitor(None, None, {})
         self.supported_nets = []  # Dynamic
-        self._fetch_supported_nets()
+        if not self.registry:
+            self._fetch_supported_nets()
 
     def _fetch_supported_nets(self):
+        # Legacy fallback if registry not provided
         self.supported_nets = []
-        for exchange in self.exchanges.values():
-            fees = exchange.fetch_deposit_withdraw_fees(['USDT'])
-            nets = list(fees['USDT']['networks'].keys())
-            for net in nets:
-                if net not in self.supported_nets:
-                    self.supported_nets.append(net)
-        log(f" Fetched supported nets from APIs: {self.supported_nets}")
+        for name, exchange in self.exchanges.items():
+            try:
+                fees = exchange.get_asset_metadata()
+                nets = list(fees['USDT']['networks'].keys())
+                for net in nets:
+                    if net not in self.supported_nets:
+                        self.supported_nets.append(net)
+            except:
+                continue
+        logger.info(f"Fetched supported nets from APIs (Legacy): {self.supported_nets}")
 
     def balance_accounts(self):
         balances = {name: exchange.get_balance(self.stable) for name, exchange in self.exchanges.items()}
@@ -35,27 +44,39 @@ class TransferManager:
                 amount = (avg - bal) / Decimal('2')
                 best_fee, best_net, best_speed = self.get_best_net(from_name, name, amount)
                 if best_fee is None:
-                    log(f"No suitable net for transfer {amount.quantize(Decimal('0.00'))} {self.stable} from {from_name} to {name}")
+                    logger.warning(f"No suitable net for transfer {amount.quantize(Decimal('0.00'))} {self.stable} from {from_name} to {name}")
                     continue
-                log(f"Best net: {best_net} (fee {best_fee.quantize(Decimal('0.00'))}, speed {best_speed}s)")
+                logger.info(f"Best net: {best_net} (fee {best_fee.quantize(Decimal('0.00'))}, speed {best_speed}s)")
                 if self.auto:
-                    self.exchanges[from_name].withdraw(self.stable, str(amount), self.exchanges[name].fetch_deposit_address(self.stable)['address'], {'network': best_net})
-                    log(f"AUTO X TRANSFER {amount.quantize(Decimal('0.00'))} {self.stable} from {from_name} to {name} via {best_net}")
+                    # Instant Address lookup from Registry
+                    address = self.registry.get_address(name, self.stable) if self.registry else None
+                    if not address:
+                        address = self.exchanges[name].fetch_deposit_address(self.stable, best_net)['address']
+                    
+                    self.exchanges[from_name].withdraw(self.stable, amount, address, best_net)
+                    logger.info(f"AUTO X TRANSFER {amount.quantize(Decimal('0.00'))} {self.stable} from {from_name} to {name} via {best_net}")
                 else:
-                    log(f"MANUAL X TRANSFER NEEDED!! : {amount.quantize(Decimal('0.00'))} {self.stable} from {from_name} to {name} via {best_net}, fee {best_fee.quantize(Decimal('0.00'))}")
+                    logger.warning(f"MANUAL X TRANSFER NEEDED!! : {amount.quantize(Decimal('0.00'))} {self.stable} from {from_name} to {name} via {best_net}, fee {best_fee.quantize(Decimal('0.00'))}")
 
     def get_best_net(self, from_name, to_name, amount: Decimal):
-        fees = self.exchanges[from_name].fetch_deposit_withdraw_fees([self.stable])
-        nets = fees[self.stable]['networks']
+        # Use Registry for instant fee/status lookup
         candidates = []
-        for net in self.supported_nets:
-            if net in nets:
-                fee = nets[net]['withdraw']['fee']
-                speed = self.health.latency_metrics[from_name][-1] if self.health.latency_metrics[from_name] else Decimal('10')
-                if net == 'ERC20' and amount < Decimal('10000'):
-                    continue
-                score = fee + (speed * Decimal('0.1'))
-                candidates.append((fee, net, speed, score))
+        networks = ['TRX', 'SOL', 'BASE', 'BSC', 'MATIC', 'KRAKEN']
+        
+        for net in networks:
+            if self.registry:
+                fee = self.registry.get_fee(from_name, self.stable, net)
+                is_online = self.registry.is_network_online(from_name, self.stable, net)
+                if fee is not None and is_online:
+                    speed = self.health.latency_metrics[from_name][-1] if self.health.latency_metrics[from_name] else Decimal('10')
+                    if net == 'ERC20' and amount < Decimal('10000'):
+                        continue
+                    score = fee + (speed * Decimal('0.1'))
+                    candidates.append((fee, net, speed, score))
+            else:
+                # Legacy fallback
+                pass
+
         if not candidates:
             return None, None, None
         best = min(candidates, key=lambda x: x[3])

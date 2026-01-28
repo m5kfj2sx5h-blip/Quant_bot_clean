@@ -93,6 +93,49 @@ class MarketContext:
         """Get current market context."""
         return self.context.copy()
 
+    def get_spread(self, book: Dict) -> Decimal:
+        """Calculate relative spread from top of book."""
+        try:
+            if not book or 'bids' not in book or 'asks' not in book or not book['bids'] or not book['asks']:
+                return Decimal('0')
+            b0, a0 = book['bids'][0], book['asks'][0]
+            bid = Decimal(str(b0[0] if isinstance(b0, (list, tuple)) else b0['price']))
+            ask = Decimal(str(a0[0] if isinstance(a0, (list, tuple)) else a0['price']))
+            return (ask - bid) / bid if bid > 0 else Decimal('0')
+        except Exception:
+            return Decimal('0')
+
+    def get_volatility(self, prices: List[Decimal]) -> Decimal:
+        """Calculate standard deviation of returns."""
+        try:
+            if len(prices) < 2:
+                return Decimal('0.0001')
+            prices_f = [float(p) for p in prices]
+            rets = np.diff(prices_f) / prices_f[:-1]
+            return Decimal(str(max(np.std(rets), 0.0001)))
+        except Exception:
+            return Decimal('0.0001')
+
+    def get_cvd(self, book: Dict) -> Decimal:
+        """Calculate Cumulative Volume Delta from top levels."""
+        try:
+            if not book: return Decimal('0')
+            bid_vol = sum(Decimal(str(l[1] if isinstance(l, (list, tuple)) else l['amount'])) for l in book.get('bids', [])[:10])
+            ask_vol = sum(Decimal(str(l[1] if isinstance(l, (list, tuple)) else l['amount'])) for l in book.get('asks', [])[:10])
+            return bid_vol - ask_vol
+        except Exception:
+            return Decimal('0')
+
+    def get_book_imbalance(self, book: Dict) -> Decimal:
+        """Calculate order book imbalance score (-1 to 1)."""
+        try:
+            if not book: return Decimal('0')
+            bid_vol = sum(Decimal(str(l[1] if isinstance(l, (list, tuple)) else l['amount'])) for l in book.get('bids', [])[:5])
+            ask_vol = sum(Decimal(str(l[1] if isinstance(l, (list, tuple)) else l['amount'])) for l in book.get('asks', [])[:5])
+            return (bid_vol - ask_vol) / (bid_vol + ask_vol) if (bid_vol + ask_vol) > 0 else Decimal('0')
+        except Exception:
+            return Decimal('0')
+
     def analyze_market(self, price_data: Dict, volume_data: Dict) -> Dict:
         """Analyze market conditions from price and volume data."""
         analysis = {}

@@ -4,26 +4,31 @@ from typing import Dict
 from datetime import datetime
 from manager.conversion import ConversionManager
 from manager.mode import ModeManager
+from manager.transfer import TransferManager
+from utils.logger import get_logger
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class MoneyManager:
-    def __init__(self, config_path='config/rebalance_config.json', exchanges: Dict = None, staking_manager=None, signals_manager=None):
+    def __init__(self, config_path='config/settings.json', exchanges: Dict = None, staking_manager=None, signals_manager=None, mode_manager=None, market_registry=None, portfolio=None):
         self.config_path = config_path
         self.exchanges = exchanges
         self.staking_manager = staking_manager
         self.signals_manager = signals_manager
         self.drift_threshold = Decimal('0.15')
-        self.conversion_manager = ConversionManager()
-        self.mode_manager = ModeManager()
+        self.conversion_manager = ConversionManager(exchanges=exchanges)
+        self.transfer_manager = TransferManager(exchanges, 'USDT', True, market_registry)
+        self.mode_manager = mode_manager or ModeManager(None, None)
+        self.portfolio = portfolio
         self.capital_mode = "balanced"
         self._cache = {}
         self.cache_ttl = 300  # 5 min
         self.retry_count = 3
-        self._load_config()
+        # self._load_config()
         logger.info(f"⚖️ MONEY MANAGER Initialized")
 
     def _load_config(self):
@@ -46,40 +51,49 @@ class MoneyManager:
                     if btc_value > Decimal('0'):
                         total_values['BTC'] = total_values.get('BTC', Decimal('0.0')) + btc_value
                         total_portfolio_value += btc_value
+        
         if total_portfolio_value <= Decimal('0'):
             return None
+            
+        if self.portfolio:
+            self.portfolio.total_value_usd = total_portfolio_value
+            
         current_allocations = {asset: value / total_portfolio_value for asset, value in total_values.items()}
         total_stable = sum(total_values.get(c, Decimal('0.0')) for c in ['USDT', 'USDC', 'USD'])
-        self.capital_mode = "bottlenecked" if total_stable < Decimal('1500') else "balanced"
-        logger.info(f"Capital mode: {self.capital_mode.upper()} (stable: ${total_stable:.2f})")
+
+        # Determine mode-specific allotments first
         current_mode = self.mode_manager.get_current_mode()
-        if current_mode == 'BTC':
-            arb_pct = Decimal('0.85')
-            staking_pct = Decimal('0.15')
-            hedging_pct = Decimal('0.0')
+        if current_mode == 'btc_mode' or current_mode == 'BTC':
+            arb_pct, staking_pct, hedging_pct = Decimal('0.85'), Decimal('0.15'), Decimal('0.0')
         else:
-            arb_pct = Decimal('0.15')
-            staking_pct = Decimal('0.0')
-            hedging_pct = Decimal('0.85')
+            arb_pct, staking_pct, hedging_pct = Decimal('0.15'), Decimal('0.0'), Decimal('0.85')
+            
+        # Dynamic Capital mode bottleneck detection (15% of Q-Bot's allocated capital)
+        bottleneck_threshold = total_portfolio_value * arb_pct * Decimal('0.15')
+        self.capital_mode = "bottlenecked" if total_stable < bottleneck_threshold else "balanced"
+        
+        logger.info(f"Capital mode: {self.capital_mode.upper()} (stable: ${total_stable:.2f}, threshold: ${bottleneck_threshold:.2f})")
         logger.info(f"Capital allotment ({current_mode}): Arb {arb_pct * 100}%, Staking {staking_pct * 100}%, Hedging {hedging_pct * 100}%")
-        target_btc = total_portfolio_value * (arb_pct + hedging_pct)
-        target_stable = total_portfolio_value * staking_pct
+
         drift_data = []
         for asset, current in current_allocations.items():
-            deviation = abs(current - Decimal('0.5') if asset == 'BTC' else Decimal('0.25'))  # Dynamic targets from analysis
-            if deviation >= Decimal('0.15'):
+            # Simplified drift check: target is proportional to mode
+            target = arb_pct if asset == 'BTC' else (staking_pct if asset in ['USDT', 'USDC'] else Decimal('0'))
+            deviation = abs(current - target)
+            if deviation >= self.drift_threshold:
                 drift_data.append((asset, deviation))
+        
         if drift_data:
+            logger.info(f"Drift >=15% detected for {len(drift_data)} assets. Attempting Zero-Transfer correction...")
+            # 1. Try Conversion Manager (Intra-exchange triangular)
             if self.conversion_manager.control_drift(drift_data):
-                self.logger.info(f"Drift controlled via intra-triangular for {len(drift_data)} assets — no transfer fees")
-            else:
-                self.logger.warning(f"Drift >=15% for {len(drift_data)} assets — no intra route, manual transfer needed")
-        if any(dev >= Decimal('0.15') for _, dev in drift_data) or total_stable < Decimal('1500'):
-            self.capital_mode = "bottlenecked"
-        else:
-            self.capital_mode = "balanced"
-        self.logger.info(f"Capital mode: {self.capital_mode}")
-        return {}  # Plan dict if needed
+                logger.info("Drift partially/fully controlled via intra-exchange triangular — saved on transfer fees")
+            
+            # 2. Try Transfer Manager (Cross-exchange)
+            logger.info("Running Transfer Manager to balance accounts...")
+            self.transfer_manager.balance_accounts()
+            
+        return {}
 
     def _fetch_balances(self) -> Dict:
         cache_key = 'balances'
@@ -90,7 +104,7 @@ class MoneyManager:
             for attempt in range(self.retry_count):
                 try:
                     balances[ex_name] = exchange.get_balance()
-                    self.logger.info(f"Fetched balances from API for {ex_name}")
+                    logger.info(f"Fetched balances from API for {ex_name}")
                     break
                 except Exception as e:
                     logger.warning(f"Balance fetch attempt {attempt+1} failed for {ex_name}: {e}")

@@ -1,7 +1,6 @@
 import os
 import time
 from dotenv import load_dotenv
-import ccxt
 
 shared_state = {'mode': 'GOLD', 'pnl': 0, 'paxg_cold': 0, 'alerts': []}
 
@@ -29,27 +28,10 @@ def load_config():
 
     return {
         'exchanges': {
-            'kraken': ccxt.kraken({
-                'apiKey': os.getenv('KRAKEN_KEY') or '',
-                'secret': os.getenv('KRAKEN_SECRET') or '',
-                'enableRateLimit': True,
-            }),
-            'binanceus': ccxt.binanceus({
-                'apiKey': os.getenv('BINANCEUS_KEY') or '',
-                'secret': os.getenv('BINANCEUS_SECRET') or '',
-                'enableRateLimit': True,
-            }),
-            'coinbase': ccxt.coinbase({
-                'apiKey': os.getenv('COINBASE_KEY') or '',
-                'secret': os.getenv('COINBASE_SECRET') or '',
-                'enableRateLimit': True,
-            }),
-            'coinbaseadv': ccxt.coinbase({  # Modern unified class
-                'apiKey': os.getenv('COINBASEADV_KEY') or '',
-                'secret': os.getenv('COINBASEADV_SECRET') or '',
-                'password': os.getenv('COINBASEADV_PASSPHRASE') or '',  # If needed
-                'enableRateLimit': True,
-            }),
+            'kraken': {'enabled': True},
+            'binanceus': {'enabled': True},
+            'coinbase': {'enabled': True},
+            'coinbaseadv': {'enabled': True},
         },
         'cold_wallet': cold_wallet,
         'paper_mode': paper_mode,

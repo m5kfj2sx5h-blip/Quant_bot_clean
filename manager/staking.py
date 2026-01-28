@@ -33,7 +33,7 @@ class StakingManager:
         for name, exchange in self.exchanges.items():
             for attempt in range(self.retry_count):
                 try:
-                    staking_assets = exchange.client.get_staking_assets() if hasattr(exchange.client, 'get_staking_assets') else []
+                    staking_assets = exchange.get_staking_assets()
                     for asset in staking_assets:
                         coin = asset.get('symbol')
                         apr = Decimal(str(asset.get('apr', 0.0)))
@@ -54,68 +54,44 @@ class StakingManager:
         if coin not in self.aprs:
             logger.error(f"Warning: Invalid coin for staking: {coin}")
             return False
-        if len(self.staked) >= self.slots:
-            logger.error("Warning: No staking slots available")
-            return False
-        ex = self.exchanges[self.aprs[coin]['exchange']]
-        held = ex.get_balance(coin)
-        if held < amount:
-            buy_amount = amount - held
-            ex.place_order(coin + '/USDT', 'buy', buy_amount)
-            logger.info(f"Money: Bought {buy_amount.quantize(Decimal('0.00'))} {coin} for staking on {ex.get_name()}")
+        
+        ex_name = self.aprs[coin]['exchange']
+        ex = self.exchanges[ex_name]
+        
         try:
-            ex.client.stake(coin, str(amount))
-            self.staked[coin] = amount
-            logger.info(f"Checkmark: Staked {amount.quantize(Decimal('0.00'))} {coin} on {self.aprs[coin]['exchange']} at {self.aprs[coin]['apr']}% APR (bond: {self.aprs[coin]['bond_days']} days)")
+            logger.info(f"📤 Staking {amount.quantize(Decimal('0.0000'))} {coin} on {ex_name} at {self.aprs[coin]['apr']}% APR")
+            ex.stake(coin, amount)
+            self.staked[coin] = self.staked.get(coin, Decimal('0')) + amount
             return True
         except Exception as e:
-            logger.error(f"Cross: Staking failed: {e}")
+            logger.error(f"❌ Staking failed for {coin} on {ex_name}: {e}")
             return False
 
     def get_highest_apy_coin(self) -> str:
         if not self.aprs:
-            return 'ETH'  # Fallback
+            return None
         return max(self.aprs, key=lambda x: self.aprs[x]['apr'])
 
-    def find_best_seat_warmers(self, idle_amount: Decimal, high_idle: bool = False):
-        self._fetch_aprs()  # Refresh
-        sorted_aprs = sorted(self.aprs.items(), key=lambda x: x[1]['apr'], reverse=True)
-        stake_count = self.slots - len(self.staked)
-        if stake_count <= 0:
-            return
-        per_stake = idle_amount / Decimal(stake_count)
-        for coin, info in sorted_aprs:
-            if len(self.staked) < self.slots:
-                if high_idle:
-                    if info['bond_days'] > self.min_bond_long:
-                        self.stake(coin, per_stake)
-                else:
-                    if info['bond_days'] < self.min_bond_short:
-                        self.stake(coin, per_stake)
-
-    def allocate(self, amount: Decimal):
-        self._fetch_aprs()
-        sorted_aprs = sorted(self.aprs.items(), key=lambda x: x[1]['apr'], reverse=True)[:len(self.aprs)]  # All that meet min_apr
-        for coin, _ in sorted_aprs:
-            if len(self.staked) >= self.slots:
-                break
-            stake_amount = amount / Decimal(len(sorted_aprs))
-            self.stake(coin, stake_amount)
-
     def unstake(self, coin, amount: Decimal = None):
-        if coin not in self.staked:
-            logger.error(f"Warning: No staking for {coin}")
+        if coin not in self.aprs:
+            logger.error(f"Warning: No staking info for {coin}")
             return False
-        amount = amount or self.staked[coin]
-        ex = self.exchanges[self.aprs[coin]['exchange']]
+            
+        amount = amount or self.staked.get(coin, Decimal('0'))
+        if amount <= 0:
+            return True
+
+        ex_name = self.aprs[coin]['exchange']
+        ex = self.exchanges[ex_name]
+        
         try:
-            ex.client.unstake(coin, str(amount))
-            self.staked[coin] -= amount
-            if self.staked[coin] <= Decimal('0'):
-                del self.staked[coin]
-            logger.info(f"Checkmark: Unstaked {amount.quantize(Decimal('0.00'))} {coin} from {self.aprs[coin]['exchange']}")
-            ex.place_order(coin + '/USDT', 'sell', amount)
+            logger.info(f"📥 Unstaking {amount.quantize(Decimal('0.0000'))} {coin} from {ex_name}")
+            ex.unstake(coin, amount)
+            if coin in self.staked:
+                self.staked[coin] -= amount
+                if self.staked[coin] <= Decimal('0'):
+                    del self.staked[coin]
             return True
         except Exception as e:
-            logger.error(f"Cross: Unstaking failed: {e}")
+            logger.error(f"❌ Unstaking failed for {coin} from {ex_name}: {e}")
             return False

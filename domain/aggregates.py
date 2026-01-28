@@ -18,12 +18,27 @@ class Portfolio:
     total_profit_usd: Decimal = Decimal('0')
     total_trades: int = 0
     winning_trades: int = 0
+    total_value_usd: Decimal = Decimal('0')
 
     # Macro cycle state - CRITICAL: Only changes 1-2x/year
     macro_signal: Optional[MacroSignal] = None
+    snapshot_tpv_at_signal: Decimal = Decimal('0')
     gold_accumulated_this_cycle: Decimal = Decimal('0')
     gold_target_this_cycle: Decimal = Decimal('0')
     last_macro_switch: Optional[datetime] = None
+
+    def restore_from_dict(self, data: dict):
+        """Restore portfolio state from persistent storage."""
+        from decimal import Decimal
+        from datetime import datetime
+        self.total_profit_usd = Decimal(str(data.get('total_profit_usd', '0')))
+        self.total_trades = int(data.get('total_trades', 0))
+        self.winning_trades = int(data.get('winning_trades', 0))
+        self.snapshot_tpv_at_signal = Decimal(str(data.get('snapshot_tpv_at_signal', '0')))
+        self.gold_accumulated_this_cycle = Decimal(str(data.get('gold_accumulated_cycle', '0')))
+        self.gold_target_this_cycle = Decimal(str(data.get('gold_target_cycle', '0')))
+        if data.get('timestamp'):
+            self.last_macro_switch = datetime.fromisoformat(data['timestamp'].replace(' ', 'T'))
 
     def update_macro_signal(self, signal: MacroSignal) -> bool:
         """Update macro mode with cooldown protection"""
