@@ -77,9 +77,19 @@ class Portfolio:
             return Decimal('0')
         return Decimal(str(self.winning_trades / self.total_trades))
 
-    def get_sharpe_ratio(self) -> Decimal:
-        # Placeholder - would need P&L history
-        return Decimal('1.5')  # Assume good performance
+    def get_sharpe_ratio(self, pnl_history: List[Decimal] = None) -> Decimal:
+        """Calculate real Sharpe Ratio from historical P&L."""
+        if not pnl_history or len(pnl_history) < 10:
+            return Decimal('0')
+        
+        returns = [float(p) for p in pnl_history]
+        avg_return = sum(returns) / len(returns)
+        std_dev = (sum((x - avg_return) ** 2 for x in returns) / len(returns)) ** 0.5
+        
+        if std_dev == 0:
+            return Decimal('0')
+            
+        return Decimal(str(avg_return / std_dev))
 
     def should_convert_to_gold(self) -> bool:
         """CRITICAL: Only true at end of MACRO cycle (1-2x/year)"""

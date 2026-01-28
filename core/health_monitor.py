@@ -2,7 +2,7 @@
 """
 RISK MANAGER, HEALTH MONITOR & PERFORMANCE TELEMETRY SYSTEM
 Version: 3.0.3 | Component: System Health & Optimization
-Author: |\/||| | Last Updated: 2026-01-22 00:12
+Author: |\\/||| | Last Updated: 2026-01-22 00:12
 
 Features:
 - Real-time performance metrics collection
@@ -56,29 +56,6 @@ class Alert:
     data: Dict[str, Any] = field(default_factory=dict)
 
 
-class RiskLimiter:
-    """Non-blocking risk checks for Q-Bot"""
-
-    def __init__(self, portfolio: Portfolio):
-        self.portfolio = portfolio
-        self.thresholds = TradingThresholds()
-
-    def can_execute_arbitrage(self, opportunity: 'ArbitrageOpportunity') -> tuple[bool, str]:
-        """
-        Fast check for Q-Bot - returns immediately, no external calls
-        """
-        if not opportunity.is_profitable:
-            return False, "⚠️ Not profitable after fees"
-
-        if opportunity.profit_percent < self.thresholds.min_arbitrage_profit_pct:
-            return False, "⚠️ Profit below minimum threshold"
-
-        # Check position size (fast approximation)
-        position_value = opportunity.amount * opportunity.buy_price
-        if position_value > self.thresholds.max_position_size_usd:
-            return False, "⚠️ Position size exceeds limit"
-
-        return True, "OK"
 
 
 class HealthMonitor:
@@ -516,7 +493,7 @@ class HealthMonitor:
                                 break
                         if price > 0: break
             
-            if price == 0: price = Decimal('1000') # Absolute last resort
+            if price == 0: continue # Skip check if no price available
             
             position_value_usd = amount * price
             if not self.thresholds.can_take_position(position_value_usd):
@@ -580,75 +557,3 @@ if __name__ == "__main__":
 
 
 
-"""
-Performance analysis for the bot system
-Runs in separate thread, doesn't block Q-Bot
-"""
-
-class PerformanceAnalyzer:
-    """Analyzes trading performance without blocking"""
-
-    def __init__(self, portfolio: 'Portfolio'):
-        self.portfolio = portfolio
-        self.trades: List[Dict] = []
-        self.last_update = datetime.min
-
-    def record_trade(self, symbol: str, profit_usd: Decimal, duration_seconds: float,
-                     exchange_pair: str):
-        """Record a completed arbitrage trade"""
-        self.trades.append({
-            'timestamp': datetime.utcnow(),
-            'symbol': symbol,
-            'profit_usd': float(profit_usd),
-            'duration_seconds': duration_seconds,
-            'exchange_pair': exchange_pair,
-        })
-
-        # Keep only last 1000 trades
-        if len(self.trades) > 1000:
-            self.trades = self.trades[-1000:]
-
-    def get_stats(self) -> Dict[str, Any]:
-        """Get performance stats (called by dashboard)"""
-        if not self.trades:
-            return self._empty_stats()
-
-        df = pd.DataFrame(self.trades)
-
-        return {
-            'total_trades': len(self.trades),
-            'total_profit_usd': df['profit_usd'].sum(),
-            'avg_profit_per_trade': df['profit_usd'].mean(),
-            'win_rate': (df['profit_usd'] > 0).mean(),
-            'avg_duration_seconds': df['duration_seconds'].mean(),
-            'best_trade': df['profit_usd'].max(),
-            'worst_trade': df['profit_usd'].min(),
-            'sharpe_ratio': self._calculate_sharpe_ratio(df),
-            'last_24h_trades': len(df[df['timestamp'] > datetime.utcnow() - timedelta(hours=24)]),
-            'last_24h_profit': df[df['timestamp'] > datetime.utcnow() - timedelta(hours=24)]['profit_usd'].sum(),
-        }
-
-    def _calculate_sharpe_ratio(self, df: pd.DataFrame) -> float:
-        """Calculate Sharpe ratio (simplified)"""
-        if len(df) < 10:
-            return 0.0
-
-        returns = pd.Series(df['profit_usd'].values)
-        if returns.std() == 0:
-            return 0.0
-
-        return float(returns.mean() / returns.std())
-
-    def _empty_stats(self) -> Dict[str, Any]:
-        return {
-            'total_trades': 0,
-            'total_profit_usd': 0.0,
-            'avg_profit_per_trade': 0.0,
-            'win_rate': 0.0,
-            'avg_duration_seconds': 0.0,
-            'best_trade': 0.0,
-            'worst_trade': 0.0,
-            'sharpe_ratio': 0.0,
-            'last_24h_trades': 0,
-            'last_24h_profit': 0.0,
-        }

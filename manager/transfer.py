@@ -73,9 +73,6 @@ class TransferManager:
                         continue
                     score = fee + (speed * Decimal('0.1'))
                     candidates.append((fee, net, speed, score))
-            else:
-                # Legacy fallback
-                pass
 
         if not candidates:
             return None, None, None

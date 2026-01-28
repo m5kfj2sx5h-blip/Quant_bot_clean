@@ -276,3 +276,10 @@ class PersistenceManager:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM trades ORDER BY timestamp DESC LIMIT ?", (limit,))
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_all_pnl(self) -> List[Decimal]:
+        """Fetch all P&L values for Sharpe calculation."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT net_profit_usd FROM trades WHERE net_profit_usd IS NOT NULL")
+            return [Decimal(row[0]) for row in cursor.fetchall()]

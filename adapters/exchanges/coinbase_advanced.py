@@ -112,23 +112,40 @@ class CoinbaseAdvancedAdapter:
         return markets
 
     def get_asset_metadata(self) -> Dict[str, Any]:
-        """Fetch Coinbase asset info. Fees are often account-tier based."""
-        # Coinbase Advanced uses a unified fee structure for most pairs
-        fees = self.client.get_transaction_summary()
+        """Fetch all stakable and tradable assets dynamically from Coinbase."""
+        products = self.client.get_products()
         assets = {}
-        # We'll populate this with common assets; CB doesn't have a bulk 'coin_info' like Binance
-        for asset in ['BTC', 'ETH', 'USDT', 'USDC', 'SOL']:
+        
+        # Aggregate unique base currencies
+        unique_assets = set()
+        for p in products:
+            if p.status == 'online':
+                unique_assets.add(p.base_currency)
+                unique_assets.add(p.quote_currency)
+        
+        for asset in unique_assets:
             assets[asset] = {
                 'name': asset,
-                'can_stake': False,
+                'can_stake': False, # Will be updated if staking assets found
                 'networks': {
                     'BASE': {
-                        'withdraw_fee': Decimal('0.00'), # Base network is often near-zero
+                        'withdraw_fee': Decimal('0.00'), # Base is preferred
                         'withdraw_enabled': True,
                         'deposit_enabled': True
                     }
                 }
             }
+            
+        # Try to discover staking assets
+        try:
+            staking_options = self.client.get_staking_options()
+            for opt in staking_options:
+                asset = opt.get('asset')
+                if asset in assets:
+                    assets[asset]['can_stake'] = True
+        except:
+            pass
+            
         return assets
 
     def fetch_deposit_address(self, asset: str) -> Dict:

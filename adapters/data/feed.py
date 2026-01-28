@@ -79,7 +79,15 @@ class DataFeed:
                 return ticker.value
         except Exception as e:
             self.logger.debug(f"Could not get BTC price for {exchange_name}: {e}")
-        return 40000.0  # Safe fallback
+        
+        # Last resort: Try to find ANY price in registry
+        if self.registry:
+            for ex in ['binance', 'kraken', 'coinbase', 'coinbase_advanced']:
+                book = self.registry.get_order_book(ex, 'BTC/USDT') or self.registry.get_order_book(ex, 'BTC/USD')
+                if book:
+                    return float(book.get('bid', book['bids'][0]['price']))
+                    
+        return 0.0 # Return 0 instead of fake price to prevent bad trades
 
     def subscribe(self, callback: Callable):
         self.data_callbacks.append(callback)
@@ -91,12 +99,18 @@ class DataFeed:
             except Exception as e:
                 self.logger.error(f"Data callback error: {e}")
 
-    def update_market_context(self, symbol: str, exchange: str, bids: List, asks: List, last_price: float):
+    def update_market_context(self, symbol: str, exchange: str, bids: List, asks: List, last_price: float, trades: List = None):
         try:
             if symbol not in self.market_contexts:
                 self.market_contexts[symbol] = MarketContext(primary_symbol=symbol)
             context = self.market_contexts[symbol]
             context.timestamp = time.time()
+            
+            # Feed granular data to context
+            if trades:
+                for t in trades:
+                    context.add_trade(Decimal(str(t.get('price'))), Decimal(str(t.get('quantity'))), t.get('side', 'unknown'))
+
             context = self.auction_analyzer.analyze_order_book(bids, asks, last_price, context)
             self._update_market_phase(context)
             self._update_execution_confidence(context)

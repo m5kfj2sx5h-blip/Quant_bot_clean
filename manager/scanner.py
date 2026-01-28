@@ -39,6 +39,67 @@ class MacroSignal:
             self.indicators = {}
 
 
+from domain.entities import ArbitrageOpportunity
+
+class ArbitrageAnalyzer:
+    """
+    Advanced Arbitrage Analyzer - The sophisticated engine.
+    Uses MarketContext (CVD, Wyckoff, VolProf) to score opportunities.
+    """
+    def __init__(self, config: Dict = None, logger: logging.Logger = None):
+        self.config = config or {}
+        self.logger = logger or logging.getLogger(__name__)
+        self.min_confidence = Decimal(str(config.get('market_intelligence', {}).get('confidence_threshold', 0.6)))
+
+    def score_opportunity(self, opportunity: Dict, context: MarketContext) -> Dict:
+        """
+        Score a potential arbitrage opportunity based on market sophisticated logic.
+        Tells QBot when to be aggressive and when to be careful.
+        """
+        score = Decimal('1.0')
+        reasoning = []
+
+        # 1. Auction Imbalance Check
+        if abs(context.auction_imbalance_score) > 0.5:
+            # High imbalance against the trade direction is bad
+            # If buying on buy_exchange, we want positive imbalance there
+            score *= Decimal('0.8')
+            reasoning.append(f"High auction imbalance: {float(context.auction_imbalance_score):.2f}")
+
+        # 2. Wyckoff Phase Influence
+        phase = context.get_wyckoff_phase()
+        if "ACCUMULATION" in phase:
+            score *= Decimal('1.2') # Be more aggressive during accumulation
+            reasoning.append("Wyckoff Accumulation detected - aggressive mode")
+        elif "MARKDOWN" in phase:
+            score *= Decimal('0.5') # Be very careful during markdown
+            reasoning.append("Wyckoff Markdown detected - careful mode")
+
+        # 3. Whale Activity
+        whales = context.get_whale_activity()
+        if whales['detected']:
+            if whales['last_whale_side'] == 'buy':
+                score *= Decimal('1.1')
+                reasoning.append("Whale buying detected")
+            else:
+                score *= Decimal('0.9')
+                reasoning.append("Whale selling detected")
+
+        # 4. Volume Profile (POC)
+        vol_prof = context.get_volume_profile()
+        if vol_prof['poc']:
+            current_price = float(opportunity['buy_price'])
+            if current_price < vol_prof['poc']:
+                # Price below POC might mean mean-reversion potential
+                score *= Decimal('1.05')
+                reasoning.append("Price below Volume POC")
+
+        opportunity['analysis_score'] = float(score)
+        opportunity['analysis_reasoning'] = reasoning
+        opportunity['is_aggressive'] = score > 1.1
+        
+        return opportunity
+
 class MarketContext:
     """Tracks and analyzes market context for intelligent trading."""
 
@@ -57,6 +118,11 @@ class MarketContext:
         self.market_sentiment = 0.0
         self.execution_confidence = 0.5
         self.volume_strength = 0.0
+        
+        # Advanced Analytics History
+        self.trade_history = deque(maxlen=1000) # (price, amount, side, timestamp)
+        self.order_book_history = deque(maxlen=100) # (bids, asks, timestamp)
+        self.cvd_history = deque(maxlen=100)
         
         # Support/Resistance
         self.key_support = None
@@ -81,15 +147,92 @@ class MarketContext:
             'liquidity_threshold': Decimal('100000'),
             'spread_threshold_wide': Decimal('0.15'),
             'spread_threshold_tight': Decimal('0.05'),
-            'sentiment_lookback': 24 if self.latency_mode == 'laptop' else 12
+            'sentiment_lookback': 24 if self.latency_mode == 'laptop' else 12,
+            'whale_threshold_multiplier': 5.0 # 5x average trade size
         }
         self.volatility = Decimal('0.0')  # Current volatility for adaptive
 
         # Data storage
         self.price_history = {}
         self.volume_history = {}
-        self.order_book_history = {}
         self.logger.info(f"Market context initialized for {primary_symbol}")
+
+    def add_trade(self, price: Decimal, amount: Decimal, side: str):
+        """Add a trade to history for advanced analytics."""
+        self.trade_history.append((price, amount, side, time.time()))
+
+    def get_whale_activity(self) -> Dict[str, Any]:
+        """Detect unusually large trades relative to recent average."""
+        if len(self.trade_history) < 20:
+            return {'detected': False, 'score': 0.0}
+        
+        amounts = [float(t[1]) for t in self.trade_history]
+        avg_amount = statistics.mean(amounts)
+        std_amount = statistics.stdev(amounts) if len(amounts) > 1 else 0
+        
+        recent_trades = list(self.trade_history)[-10:]
+        whales = [t for t in recent_trades if float(t[1]) > avg_amount + (self.settings['whale_threshold_multiplier'] * std_amount)]
+        
+        if whales:
+            return {
+                'detected': True,
+                'count': len(whales),
+                'score': min(1.0, len(whales) / 5.0),
+                'last_whale_side': whales[-1][2]
+            }
+        return {'detected': False, 'score': 0.0}
+
+    def get_volume_profile(self) -> Dict[str, Any]:
+        """Calculate basic Volume Profile (POC, Value Area)."""
+        if len(self.trade_history) < 50:
+            return {'poc': None, 'va_high': None, 'va_low': None}
+        
+        prices = [float(t[0]) for t in self.trade_history]
+        vols = [float(t[1]) for t in self.trade_history]
+        
+        # Bin prices into levels
+        min_p, max_p = min(prices), max(prices)
+        if min_p == max_p: return {'poc': min_p}
+        
+        bins = 20
+        hist, bin_edges = np.histogram(prices, bins=bins, weights=vols)
+        
+        max_bin_idx = np.argmax(hist)
+        poc = (bin_edges[max_bin_idx] + bin_edges[max_bin_idx+1]) / 2
+        
+        # Simplified Value Area (70% volume around POC)
+        # In a real implementation we'd expand from POC until 70% reached
+        return {
+            'poc': poc,
+            'va_high': poc * 1.02, # Placeholder for real VA
+            'va_low': poc * 0.98
+        }
+
+    def get_wyckoff_phase(self) -> str:
+        """Heuristic-based Wyckoff Phase detection."""
+        # This is a complex pattern, using a simplified version based on price/vol trends
+        if len(self.trade_history) < 100:
+            return "UNKNOWN"
+        
+        prices = [float(t[0]) for t in self.trade_history]
+        vols = [float(t[1]) for t in self.trade_history]
+        
+        # Check for Accumulation (Sideways price, increasing volume on up-moves)
+        price_range = (max(prices) - min(prices)) / statistics.mean(prices)
+        if price_range < 0.05:
+            # Low volatility / consolidation
+            up_vol = sum(vols[i] for i in range(1, len(prices)) if prices[i] > prices[i-1])
+            down_vol = sum(vols[i] for i in range(1, len(prices)) if prices[i] < prices[i-1])
+            if up_vol > down_vol * 1.2:
+                return "PHASE_A_ACCUMULATION"
+            return "PHASE_B_CONSOLIDATION"
+        
+        # Trend detection
+        slope = np.polyfit(range(len(prices)), prices, 1)[0]
+        if slope > 0: return "MARKUP"
+        if slope < 0: return "MARKDOWN"
+        
+        return "PHASE_C_TESTING"
 
     def to_dict(self) -> Dict:
         """Serialize context for logging/dashboard."""
@@ -100,7 +243,9 @@ class MarketContext:
             'imbalance': float(self.auction_imbalance_score),
             'behavior': self.crowd_behavior,
             'sentiment': self.market_sentiment,
-            'confidence': self.execution_confidence
+            'confidence': self.execution_confidence,
+            'wyckoff': self.get_wyckoff_phase(),
+            'whale_score': self.get_whale_activity()['score']
         }
 
     def update(self, new_context: Dict):
@@ -396,52 +541,3 @@ class MarketContext:
 
         return params
 
-
-@dataclass
-class ArbitrageOpportunity:
-    """Represents an arbitrage opportunity."""
-    symbol: str
-    buy_exchange: str
-    sell_exchange: str
-    buy_price: Decimal
-    sell_price: Decimal
-    spread_percentage: Decimal
-    estimated_profit: Decimal
-    confidence: Decimal
-    timestamp: float  # Time, keep float
-    capital_mode: str = "BALANCED"
-    position_size_usd: Decimal = Decimal('1000.0')
-
-
-class ArbitrageAnalyzer:
-    """Advanced arbitrage opportunity analyzer."""
-
-    def __init__(self, context: Dict, config: Dict, logger: logging.Logger):
-        """Initialize arbitrage analyzer."""
-        self.context = context
-        self.config = config
-        self.logger = logger
-
-        # Analysis settings
-        self.settings = {
-            'min_confidence': Decimal('0.6'),
-            'max_slippage_percent': Decimal('0.5'),
-            'liquidity_requirement': Decimal('0.1'),
-            'max_position_size_usd': Decimal('5000.0'),
-            'min_position_size_usd': Decimal('10.0')
-        }
-
-        # Capital mode settings
-        self.capital_mode = context.get('capital_mode', 'BALANCED')
-        self.available_capital_usd = Decimal(str(context.get('available_capital_usd', 1000.0)))
-        self.exchange_balances = context.get('exchange_balances', {})
-
-        self.logger.info("Arbitrage analyzer initialized")
-
-    def analyze_opportunity(self, opportunity: Dict, book: Dict, prices: List[Decimal]) -> Dict:
-        spread = self.context.get_spread(book)
-        volatility = self.context.get_volatility(prices)
-        cvd = self.context.get_cvd(book)
-        imbalance = self.context.get_book_imbalance(book)
-        score = spread * (Decimal('1') / volatility) * (cvd / Decimal('1000')) * imbalance
-        return {'spread': spread, 'volatility': volatility, 'cvd': cvd, 'imbalance': imbalance, 'score': score}

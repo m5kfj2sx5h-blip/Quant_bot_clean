@@ -8,11 +8,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class OrderExecutor:
-    def __init__(self, config: Dict, logger: logging.Logger, exchanges: Dict, persistence_manager=None):
+    def __init__(self, config: Dict, logger: logging.Logger, exchanges: Dict, persistence_manager=None, fee_manager=None, risk_manager=None):
         self.config = config
         self.logger = logger
         self.exchanges = exchanges
         self.persistence_manager = persistence_manager
+        self.fee_manager = fee_manager
+        self.risk_manager = risk_manager
         self.execution_history = []
         self.max_history_size = 100
         self.settings = {
@@ -30,7 +32,7 @@ class OrderExecutor:
         self.total_loss = Decimal('0.0')
         self.logger.info("Order executor initialized")
 
-    def execute_arbitrage(self, buy_exchange: str, sell_exchange: str, buy_price: Decimal, sell_price: Decimal,
+    async def execute_arbitrage(self, buy_exchange: str, sell_exchange: str, buy_price: Decimal, sell_price: Decimal,
                           symbol: str, position_size: Decimal, expected_profit: Decimal,
                           trade_params: Optional[Dict] = None) -> bool:
         start_time = time.time()
@@ -62,8 +64,8 @@ class OrderExecutor:
         sell_result = self._execute_order(sell_exchange, symbol, 'sell', actual_buy_amount, min_sell_price, 'limit')
         if not sell_result['success']:
             self.logger.error(f"Sell order failed: {sell_result.get('error', 'Unknown error')}")
-            if self.settings['enable_hedging']:
-                self._hedge_position(buy_exchange, sell_exchange, symbol, actual_buy_amount, actual_buy_price)
+            # Leg failed: Monitor and exit based on 1% risk rule
+            await self._monitor_and_emergency_exit(buy_exchange, sell_exchange, symbol, actual_buy_amount, actual_buy_price, dynamic_position_size)
             self.failed_trades += 1
             return False
         actual_sell_price = sell_result['price']
@@ -178,27 +180,59 @@ class OrderExecutor:
             return False
         return True
 
-    def _hedge_position(self, original_buy_exchange: str, failed_sell_exchange: str, symbol: str,
-                        amount: Decimal, buy_price: Decimal) -> bool:
-        self.logger.warning(f"Hedging position: {amount.quantize(Decimal('0.000000'))} {symbol} at ${buy_price.quantize(Decimal('0.00'))}")
-        alternative_exchanges = list(self.exchanges.keys())
-        alternative_exchanges.remove(original_buy_exchange)
-        if failed_sell_exchange in alternative_exchanges:
-            alternative_exchanges.remove(failed_sell_exchange)
-        if not alternative_exchanges:
-            self.logger.error("No alternative exchanges available for hedging")
-            return False
-        hedge_exchange = alternative_exchanges[0]
-        self.logger.info(f"Hedging on {hedge_exchange} at market price")
-        hedge_result = self._execute_order(hedge_exchange, symbol, 'sell', amount, buy_price * Decimal('0.95'), 'market')
-        if hedge_result['success']:
-            hedge_price = hedge_result['price']
-            hedge_loss = (buy_price - hedge_price) * amount
-            self.logger.warning(f"Position hedged with loss: ${hedge_loss:.2f}")
-            return True
-        else:
-            self.logger.error(f"Hedge failed: {hedge_result.get('error')}")
-            return False
+    async def _monitor_and_emergency_exit(self, original_buy_exchange: str, failed_sell_exchange: str, symbol: str,
+                                amount: Decimal, buy_price: Decimal, allotted_capital: Decimal) -> bool:
+        """
+        Monitors a position and exits if it hits the 1% risk limit or finds another exit.
+        """
+        self.logger.warning(f"🚨 MONITORING LEG-FAILED POSITION: {amount} {symbol} bought on {original_buy_exchange} @ ${buy_price}")
+        
+        while True:
+            # Get current price
+            current_price = Decimal('0')
+            alternative_exchanges = [failed_sell_exchange, original_buy_exchange] + list(self.exchanges.keys())
+            
+            for ex in alternative_exchanges:
+                try:
+                    ticker = self.exchanges[ex].get_ticker_price(symbol)
+                    current_price = ticker.value
+                    if current_price > 0: break
+                except:
+                    continue
+            
+            if current_price == 0:
+                self.logger.error("Could not fetch current price for emergency monitoring")
+                await asyncio.sleep(5)
+                continue
+
+            # Check 1% risk rule via RiskManager
+            if self.risk_manager and self.risk_manager.check_emergency_exit(symbol, current_price, buy_price, allotted_capital):
+                self.logger.critical(f"1% Risk Limit Hit! Executing Emergency Market Exit for {symbol}")
+                # Sell anywhere possible at market
+                for ex in alternative_exchanges:
+                    try:
+                        self.logger.info(f"Attempting emergency market sell on {ex}")
+                        res = self._execute_order(ex, symbol, 'sell', amount, current_price * Decimal('0.95'), 'market')
+                        if res['success']:
+                            self.logger.info(f"✅ EMERGENCY EXIT SUCCESS ON {ex}")
+                            return True
+                    except:
+                        continue
+                break # Exit loop if failed all exchanges
+            
+            # Check if we can exit with profit or break-even
+            if current_price >= buy_price * Decimal('1.001'): # 0.1% profit buffer
+                 self.logger.info(f"Exiting leg-failed position at break-even/profit: ${current_price}")
+                 for ex in alternative_exchanges:
+                    try:
+                        res = self._execute_order(ex, symbol, 'sell', amount, current_price, 'market')
+                        if res['success']: return True
+                    except: continue
+                 break
+
+            await asyncio.sleep(10) # Monitor every 10s
+            
+        return False
 
     def _execute_order(self, exchange_id: str, symbol: str, side: str, amount: Decimal,
                        price_limit: Decimal, order_type: str = 'limit') -> Dict:
@@ -210,7 +244,13 @@ class OrderExecutor:
                 self.logger.debug(f"Attempt {attempt + 1}/{self.settings['max_retries']}: {side.upper()} {amount} {symbol} on {exchange_id}")
                 order = exchange.place_order(symbol, side, amount, price_limit if order_type == 'limit' else None)
                 execution_price = Decimal(order.get('price', price_limit))
-                fee_rate = Decimal('0.001')  # Fetch live from fee manager if integrated
+                
+                # Fetch live fee from FeeManager
+                if self.fee_manager:
+                    fee_rate = self.fee_manager.get_effective_fee(exchange_id, amount * execution_price, is_maker=(order_type == 'limit'))
+                else:
+                    fee_rate = Decimal('0.001')  # Fallback
+                
                 fee = amount * execution_price * fee_rate
                 self.logger.info(f"Fetched order execution from API for {exchange_id}")
                 return {'success': True, 'price': execution_price, 'amount': amount, 'fee': fee}

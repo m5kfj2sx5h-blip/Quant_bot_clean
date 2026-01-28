@@ -15,17 +15,19 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class QBot:
-    def __init__(self, config: dict, exchanges: Dict, fee_manager=None, threshold_manager=None, health_monitor=None, market_registry=None, portfolio=None, persistence_manager=None):
+    def __init__(self, config: dict, exchanges: Dict, fee_manager=None, risk_manager=None, health_monitor=None, market_registry=None, portfolio=None, persistence_manager=None, arbitrage_analyzer=None, data_feed=None):
         self.config = config
         self.exchanges = exchanges
         self.fee_manager = fee_manager
-        self.threshold_manager = threshold_manager
+        self.risk_manager = risk_manager
         self.health_monitor = health_monitor
         self.market_registry = market_registry
         self.portfolio = portfolio
         self.persistence_manager = persistence_manager
+        self.arbitrage_analyzer = arbitrage_analyzer
+        self.data_feed = data_feed
         self.auction_module = AuctionContextModule()
-        self.order_executor = OrderExecutor(config, logger, exchanges, persistence_manager)
+        self.order_executor = OrderExecutor(config, logger, exchanges, persistence_manager, fee_manager, risk_manager)
         qbot_split = config.get('capital', {}).get('qbot_internal_split', {})
         self.cross_exchange_pct = Decimal(str(qbot_split.get('cross_exchange', 80))) / 100
         self.triangular_pct = Decimal(str(qbot_split.get('triangular', 20))) / 100
@@ -66,23 +68,23 @@ class QBot:
         Calculate dynamic threshold (0.4% - 1.0%) based on market context.
         Baseline is 0.5%.
         """
-        baseline = Decimal('0.005')
+        threshold = Decimal('0.005') # 0.5% baseline
         
-        # If we have health monitor and auction data, make it dynamic
-        if self.health_monitor and pair and exchange:
-            # This is a bit of a stretch since we don't have a direct 'get_context' in health_monitor 
-            # but let's assume we can get some sentiment or volatility
-            try:
-                # Logic: High volatility or aggressive sentiment -> Higher threshold
-                # Low volatility or balanced auction -> Lower threshold
-                pass
-            except:
-                pass
-
-        if self.threshold_manager:
-            return self.threshold_manager.get_threshold()
+        if self.health_monitor:
+            health = self.health_monitor.get_health_status()
+            # Increase threshold if system is stressed
+            if health['overall_health'] == 'degraded':
+                threshold = Decimal('0.007') # 0.7%
+            elif health['overall_health'] == 'critical':
+                threshold = Decimal('0.010') # 1.0%
             
-        return baseline
+            # Check volatility if metrics are available
+            perf = health.get('performance_metrics', {})
+            if perf.get('std_cycle_time', 0) > 0.5: # Jittery cycle times indicate stress
+                threshold += Decimal('0.001')
+
+        # Limit to approved range
+        return max(Decimal('0.004'), min(Decimal('0.010'), threshold))
 
     def get_effective_fee(self, exchange: str, trade_value: Decimal) -> Decimal:
         if self.fee_manager:
@@ -154,6 +156,22 @@ class QBot:
                     net_profit_pct = net_profit_usd / trade_value
                     
                     if net_profit_pct >= threshold:
+                        # Sophisticated Scoring
+                        if self.arbitrage_analyzer and self.data_feed:
+                            context = self.data_feed.market_contexts.get(pair)
+                            if context:
+                                opp_data = {
+                                    'buy_price': buy_price,
+                                    'sell_price': sell_price,
+                                    'pair': pair
+                                }
+                                scored_opp = self.arbitrage_analyzer.score_opportunity(opp_data, context)
+                                if scored_opp['analysis_score'] < 0.6:
+                                    logger.warning(f"Sophisticated logic rejected {pair}: score {scored_opp['analysis_score']}")
+                                    continue
+                                if scored_opp['is_aggressive']:
+                                    logger.info(f"🚀 AGGRESSIVE MODE for {pair} (Wyckoff/Whale signal)")
+
                         # Depth check: top 5 volume > 2.5–5x trade size
                         # Using auction module for more accurate fill estimation
                         bid_list = [(b['price'], b['amount']) for b in books[sell_ex]['bids']]

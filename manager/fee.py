@@ -52,8 +52,8 @@ class FeeManager:
             for sell_ex in available:
                 if buy_ex == sell_ex:
                     continue
-                buy_fee = self._get_effective_fee(buy_ex, amount_usd, is_maker=False)
-                sell_fee = self._get_effective_fee(sell_ex, amount_usd, is_maker=False)
+                buy_fee = self.get_effective_fee(buy_ex, amount_usd, is_maker=False)
+                sell_fee = self.get_effective_fee(sell_ex, amount_usd, is_maker=False)
                 total_fee = buy_fee + sell_fee
                 if total_fee < lowest_fee_pair:
                     lowest_fee_pair = total_fee
@@ -62,7 +62,7 @@ class FeeManager:
         estimated_profit = self._estimate_profit_after_fees(symbol, amount_usd, best_buy, best_sell)
         return best_buy, best_sell, estimated_profit
 
-    def _get_effective_fee(self, exchange: str, amount_usd: Decimal, is_maker: bool) -> Decimal:
+    def get_effective_fee(self, exchange: str, amount_usd: Decimal, is_maker: bool) -> Decimal:
         if exchange not in self.fee_structures:
             return Decimal('0.001')
         fee_struct = self.fee_structures[exchange]
@@ -75,7 +75,7 @@ class FeeManager:
 
     def _estimate_profit_after_fees(self, symbol: Symbol, amount_usd: Decimal, buy_ex: str, sell_ex: str) -> Decimal:
         spread_profit = amount_usd * Decimal('0.005')
-        buy_fee = amount_usd * self._get_effective_fee(buy_ex, amount_usd, False)
-        sell_fee = amount_usd * self._get_effective_fee(sell_ex, amount_usd, False)
+        buy_fee = amount_usd * self.get_effective_fee(buy_ex, amount_usd, False)
+        sell_fee = amount_usd * self.get_effective_fee(sell_ex, amount_usd, False)
         net_profit = spread_profit - buy_fee - sell_fee
         return net_profit

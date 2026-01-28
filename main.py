@@ -29,6 +29,7 @@ from manager.staking import StakingManager
 from manager.transfer import TransferManager
 from manager.registry import MarketRegistry, RegistryWorker
 from manager.persistence import PersistenceManager
+from manager.risk import RiskManager
 from utils.logger import get_logger
 
 from domain.aggregates import Portfolio
@@ -48,6 +49,7 @@ class SystemCoordinator:
         self.staking_manager = None
         self.transfer_manager = None
         self.health_monitor = None
+        self.risk_manager = None
         self.market_registry = MarketRegistry()
         self.persistence_manager = PersistenceManager()
         self.registry_worker = None
@@ -100,7 +102,9 @@ class SystemCoordinator:
         self.fee_manager = FeeManager(self.config, self.exchanges, self.market_registry)
         self.staking_manager = StakingManager(self.exchanges, self.config)
         self.transfer_manager = TransferManager(self.exchanges, 'USDT', True, self.market_registry)
-        self.health_monitor = HealthMonitor(self.portfolio, None, self.config, logger, self.market_registry)
+        self.health_monitor = HealthMonitor(self.portfolio, self._handle_alert, self.config, logger, self.market_registry)
+        self.risk_manager = RiskManager(self.portfolio, self.config)
+        self.arbitrage_analyzer = ArbitrageAnalyzer(self.config, logger)
         
         # 5. Initialize Registry Worker
         self.registry_worker = RegistryWorker(self.market_registry, self.exchanges)
@@ -131,6 +135,13 @@ class SystemCoordinator:
         self.money_manager.signals_manager = self.signals_server
         
         logger.info("🚀 SYSTEM COORDINATOR Initialized")
+
+    async def _handle_alert(self, level: str, message: str):
+        """Standardized alert handler for HealthMonitor."""
+        logger.warning(f"🔔 ALERT [{level}]: {message}")
+        if self.persistence_manager:
+            # We could store alerts in a dedicated table, for now just log
+            pass
 
     async def handle_mode_change(self, mode_str: str):
         """Callback for SignalServer when a macro mode change is received."""
@@ -168,10 +179,13 @@ class SystemCoordinator:
                 self.config, 
                 self.exchanges, 
                 fee_manager=self.fee_manager, 
+                risk_manager=self.risk_manager,
                 health_monitor=self.health_monitor,
                 market_registry=self.market_registry,
                 portfolio=self.portfolio,
-                persistence_manager=self.persistence_manager
+                persistence_manager=self.persistence_manager,
+                arbitrage_analyzer=self.arbitrage_analyzer,
+                data_feed=self.data_feed
             )
             # Start Q-Bot loop if it has one
         

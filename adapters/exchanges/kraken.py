@@ -85,24 +85,28 @@ class KrakenAdapter:
         return markets
 
     def get_asset_metadata(self) -> Dict[str, Any]:
-        """Fetch asset network info. Kraken requires per-asset withdrawal method calls."""
-        # To avoid rate limits, we only fetch for common arb assets or use a slower cycle
+        """Fetch asset network info dynamically from Kraken."""
         assets_info = self.client.assets()
         assets = {}
+        
+        # We only poll a subset of networks to avoid rate limits if needed, 
+        # but for discovery we try to map assets.
         for key, a in assets_info.items():
-            # Withdrawal fees on Kraken are usually static per method, 
-            # but we'll fetch them dynamically where possible
-            assets[a['altname']] = {
-                'name': a['altname'],
+            asset_name = a.get('altname', key)
+            assets[asset_name] = {
+                'name': asset_name,
                 'can_stake': 'staking' in a.get('status', '').lower(),
                 'networks': {
                     'KRAKEN': {
                         'withdraw_fee': Decimal('0.0005'), # Default fallback
-                        'withdraw_enabled': True,
-                        'deposit_enabled': True
+                        'withdraw_enabled': a.get('status') == 'enabled',
+                        'deposit_enabled': a.get('status') == 'enabled'
                     }
                 }
             }
+            
+        # Optional: Try to fetch real withdrawal methods for major arb assets
+        # This can be expensive API-wise, so we do it sparingly if registry worker calls it.
         return assets
 
     def fetch_deposit_address(self, asset: str, method: str = 'Solana') -> Dict:
