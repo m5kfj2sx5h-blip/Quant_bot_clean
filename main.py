@@ -66,12 +66,13 @@ class SystemCoordinator:
         from adapters.exchanges.coinbase_regular import CoinbaseRegularAdapter
         from adapters.exchanges.coinbase_advanced import CoinbaseAdvancedAdapter
         
-        # Restore Portfolio state from SQLite
+        # 1. Restore Portfolio & Mode state from SQLite
         last_state = self.persistence_manager.load_last_state()
         if last_state:
             self.portfolio.restore_from_dict(last_state)
             logger.info(f"📊 Portfolio restored: Profit=${self.portfolio.total_profit_usd:,.2f}, TPV Snapshot=${self.portfolio.snapshot_tpv_at_signal:,.2f}")
 
+        # 2. Initialize Adapters
         self.exchanges = {
             'binanceus': BinanceUSAdapter(),
             'kraken': KrakenAdapter(),
@@ -79,6 +80,7 @@ class SystemCoordinator:
             'coinbase_advanced': CoinbaseAdvancedAdapter()
         }
         
+        # 3. Initialize Feed & Registry
         self.data_feed = DataFeed(self.config, logger, self.market_registry)
         # Set up a fake exchange config if it's missing to allow data_feed to initialize enabled exchanges
         if 'exchanges' not in self.config:
@@ -94,22 +96,17 @@ class SystemCoordinator:
         except Exception as e:
             logger.error(f"Failed to start WebSocket feed: {e}. Continuing with restricted data.")
         
+        # 4. Initialize Managers
         self.fee_manager = FeeManager(self.config, self.exchanges, self.market_registry)
         self.staking_manager = StakingManager(self.exchanges, self.config)
         self.transfer_manager = TransferManager(self.exchanges, 'USDT', True, self.market_registry)
         self.health_monitor = HealthMonitor(self.portfolio, None, self.config, logger, self.market_registry)
         
-        # Initialize Registry Worker for Evidence-Based Metadata
+        # 5. Initialize Registry Worker
         self.registry_worker = RegistryWorker(self.market_registry, self.exchanges)
         asyncio.create_task(self.registry_worker.start())
         
-        # Restore State from Persistence
-        last_state = self.persistence_manager.load_last_state()
-        if last_state:
-            self.portfolio.restore_from_dict(last_state)
-            logger.info(f"💾 Restored portfolio state. Total Profit: ${self.portfolio.total_profit_usd:.2f}")
-
-        # Initialize Managers with shared Portfolio
+        # 6. Finalize Mode & Money Managers
         self.mode_manager = ModeManager(self.portfolio, os.getenv('WEBHOOK_PASSPHRASE'))
         if last_state and last_state.get('current_mode'):
             try:
@@ -237,7 +234,33 @@ class SystemCoordinator:
         """Infinite loop to trigger bot scans and money management."""
         while self.running:
             try:
-                # 1. Money Management & Rebalancing (every 5 mins)
+                # 0. Check for Manual Commands from Dashboard
+                if self.persistence_manager:
+                    cmds = self.persistence_manager.get_pending_commands()
+                    for cmd in cmds:
+                        logger.info(f"Executing manual command: {cmd['command']}")
+                        if cmd['command'] == 'SWITCH_MODE':
+                            await self.handle_mode_change(cmd['params'].get('mode'))
+                        elif cmd['command'] == 'G_SWEEP':
+                            if 'gbot' in self.bots:
+                                # Trigger sweep of 15% profits
+                                self.bots['gbot'].execute_manual_sweep(self.portfolio.total_profit_usd)
+                        self.persistence_manager.mark_command_complete(cmd['id'])
+
+                # 1. Market Snapshots for Dashboard (Every Cycle)
+                if self.persistence_manager and self.market_registry:
+                    for ex in self.exchanges:
+                        for sym in ['BTC/USDT', 'BTC/USD', 'PAXG/USDT', 'ETH/USDT']:
+                            book = self.market_registry.get_order_book(ex, sym)
+                            if book:
+                                try:
+                                    bid = Decimal(str(book.get('bid', book['bids'][0]['price'])))
+                                    ask = Decimal(str(book.get('ask', book['asks'][0]['price'])))
+                                    self.persistence_manager.save_market_snapshot(ex, sym, bid, ask)
+                                except (KeyError, IndexError, ValueError):
+                                    continue
+
+                # 2. Money Management & Rebalancing (every 5 mins)
                 if time.time() - self.last_money_check > 300:
                     try:
                         self.money_manager.generate_macro_plan(
@@ -247,6 +270,7 @@ class SystemCoordinator:
                         )
                         # Periodic persistence of portfolio state
                         if self.persistence_manager:
+                            # Snapshot Portfolio
                             self.persistence_manager.update_portfolio_state(
                                 self.portfolio, 
                                 self.mode_manager.get_current_mode().value

@@ -35,11 +35,29 @@ class MoneyManager:
         pass  # No ops values
 
     def generate_macro_plan(self, price_data, min_btc_reserve, min_stable_reserve):
+        from domain.entities import Balance
         balances = self._fetch_balances()
         total_values = {}
         total_portfolio_value = Decimal('0.0')
+        
+        # Clear and rebuild exchange balances in portfolio
+        if self.portfolio:
+            self.portfolio.exchange_balances = {}
+
         for ex_name, balance in balances.items():
+            if self.portfolio and ex_name not in self.portfolio.exchange_balances:
+                self.portfolio.exchange_balances[ex_name] = {}
+                
             for currency, amount in balance.items():
+                # Add to portfolio aggregate
+                if self.portfolio:
+                    self.portfolio.exchange_balances[ex_name][currency] = Balance(
+                        currency=currency,
+                        free=amount,
+                        used=Decimal('0'),
+                        total=amount
+                    )
+
                 if amount <= Decimal('0'):
                     continue
                 if currency in ['USDT', 'USDC', 'USD']:

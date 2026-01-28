@@ -12,10 +12,6 @@ import numpy as np
 from manager.persistence import PersistenceManager
 from domain.aggregates import Portfolio
 from domain.entities import TradingMode
-from adapters.exchanges.binanceus import BinanceUSAdapter
-from adapters.exchanges.kraken import KrakenAdapter
-from adapters.exchanges.coinbase_advanced import CoinbaseAdvancedAdapter
-from adapters.exchanges.coinbase_regular import CoinbaseRegularAdapter
 
 load_dotenv()
 
@@ -222,25 +218,21 @@ footer {visibility: hidden;}
 def initialize_exchanges():
     exchanges = {
         'kraken': {
-            'adapter': KrakenAdapter(),
             'status': "ONLINE",
             'color': '#5844a8',
             'logo': '₭'
         },
-        'binance': {
-            'adapter': BinanceUSAdapter(),
+        'binanceus': {
             'status': "ONLINE",
             'color': '#f0b90b',
             'logo': 'ⓑ'
         },
         'coinbase_advanced': {
-            'adapter': CoinbaseAdvancedAdapter(),
             'status': "ONLINE",
             'color': '#0052ff',
             'logo': 'Ⓒ'
         },
         'coinbase': {
-            'adapter': CoinbaseRegularAdapter(),
             'status': "ONLINE",
             'color': '#0052ff',
             'logo': 'Ⓒ'
@@ -250,13 +242,24 @@ def initialize_exchanges():
 
 @st.cache_data(ttl=10)
 def fetch_exchange_balances():
-    exchanges = initialize_exchanges()
+    last_state = persistence_manager.load_last_state()
+    if not last_state:
+        return [], 0, 0, 0, 0, {}
+        
+    exchanges_config = initialize_exchanges()
     balance_data = []
-    total_net_worth = Decimal('0')
-    arbitrage_capital = Decimal('0')
-    total_btc = Decimal('0')
-    total_gold = Decimal('0')
     
+    total_net_worth = Decimal(str(last_state.get('total_value_usd', '0')))
+    total_btc = Decimal('0')
+    total_gold = Decimal(str(last_state.get('gold_accumulated_cycle', '0')))
+    arbitrage_capital = total_net_worth * Decimal('0.85') # Rough estimate based on mode
+    
+    # Parse stored balances
+    try:
+        raw_balances = json.loads(last_state.get('exchange_balances', '{}'))
+    except:
+        raw_balances = {}
+        
     asset_details = {
         'BTC': {'amount': Decimal('0'), 'value': Decimal('0')},
         'USDT': {'amount': Decimal('0'), 'value': Decimal('0')},
@@ -267,129 +270,85 @@ def fetch_exchange_balances():
         'Other': {'amount': Decimal('0'), 'value': Decimal('0')}
     }
     
-    for name, data in exchanges.items():
-        adapter = data['adapter']
-        try:
-            balances = adapter.get_all_balances()
+    # Get current prices for sub-asset value calculation
+    snapshots = persistence_manager.get_market_snapshots()
+    prices = {s['symbol']: Decimal(s['bid']) for s in snapshots}
+    btc_price = prices.get('BTC/USDT', Decimal('40000'))
+    
+    for name, balances in raw_balances.items():
+        exchange_net_worth = Decimal('0')
+        asset_details_exchange = {}
+        btc_amount = Decimal('0')
+        stable_amount = Decimal('0')
+        
+        for asset, amount_str in balances.items():
+            amount = Decimal(amount_str)
+            value = Decimal('0')
             
-            # Fetch prices for TPV calculation
-            btc_price = Decimal('40000') 
-            try:
-                ticker = adapter.get_ticker_price('BTC/USDT' if name == 'binance' else 'BTC/USD')
-                btc_price = ticker.value
-            except: pass
-            
-            exchange_net_worth = Decimal('0')
-            exchange_arbitrage_capital = Decimal('0')
-            asset_details_exchange = {}
-            btc_amount = Decimal('0')
-            stable_amount = Decimal('0')
-            
-            for asset, amounts in balances.items():
-                amount = amounts['total']
-                free = amounts['free']
-                value = Decimal('0')
+            if asset in ['USD', 'USDT', 'USDC']:
+                value = amount
+                stable_amount += amount
+            elif asset == 'BTC':
+                value = amount * btc_price
+                btc_amount = amount
+                total_btc += amount
+            elif asset == 'PAXG':
+                paxg_price = prices.get('PAXG/USDT', Decimal('2000'))
+                value = amount * paxg_price
+            elif asset == 'ETH':
+                eth_price = prices.get('ETH/USDT', Decimal('2500'))
+                value = amount * eth_price
+            else:
+                value = amount * Decimal('1') # Generic fallback
                 
-                if asset in ['USD', 'USDT', 'USDC']:
-                    value = amount
-                    stable_amount += amount
-                    asset_details[asset]['amount'] += amount
-                    asset_details[asset]['value'] += value
-                    exchange_arbitrage_capital += free
-                    
-                elif asset == 'BTC':
-                    value = amount * btc_price
-                    btc_amount = amount
-                    total_btc += amount
-                    asset_details['BTC']['amount'] += amount
-                    asset_details['BTC']['value'] += value
-                    exchange_arbitrage_capital += free * btc_price
-                    
-                elif asset == 'PAXG':
-                    value = amount * btc_price * Decimal('0.05')
-                    total_gold += amount
-                    asset_details['PAXG']['amount'] += amount
-                    asset_details['PAXG']['value'] += value
+            if asset in asset_details:
+                asset_details[asset]['amount'] += amount
+                asset_details[asset]['value'] += value
+            else:
+                asset_details['Other']['amount'] += amount
+                asset_details['Other']['value'] += value
                 
-                elif asset == 'ETH':
-                    value = amount * btc_price * Decimal('0.06')
-                    asset_details['ETH']['amount'] += amount
-                    asset_details['ETH']['value'] += value
-                
-                else:
-                    value = amount * btc_price * Decimal('0.001')
-                    asset_details['Other']['amount'] += amount
-                    asset_details['Other']['value'] += value
-                
-                exchange_net_worth += value
-                asset_details_exchange[asset] = {
-                    'amount': float(amount),
-                    'value': float(value),
-                    'free': float(free)
-                }
+            exchange_net_worth += value
+            asset_details_exchange[asset] = {
+                'amount': float(amount),
+                'value': float(value),
+                'free': float(amount) # Snapshot assumes total=free for simplicity
+            }
             
-            total_net_worth += exchange_net_worth
-            arbitrage_capital += exchange_arbitrage_capital
-            
-            balance_data.append({
-                'Exchange': name.upper(),
-                'NetWorth': float(exchange_net_worth),
-                'ArbitrageCapital': float(exchange_arbitrage_capital),
-                'Status': data['status'],
-                'Details': asset_details_exchange,
-                'BTC': float(btc_amount),
-                'Stablecoins': float(stable_amount),
-                'Color': data['color'],
-                'Logo': data['logo']
-            })
-            
-        except Exception as e:
-            balance_data.append({
-                'Exchange': name.upper(),
-                'NetWorth': 0,
-                'ArbitrageCapital': 0,
-                'Status': f"ERROR: {str(e)[:20]}",
-                'Details': {},
-                'BTC': 0,
-                'Stablecoins': 0,
-                'Color': data['color'],
-                'Logo': data['logo']
-            })
+        config = exchanges_config.get(name, {'color': '#ffffff', 'logo': '?'})
+        balance_data.append({
+            'Exchange': name.upper(),
+            'NetWorth': float(exchange_net_worth),
+            'ArbitrageCapital': float(exchange_net_worth * Decimal('0.85')),
+            'Status': "ONLINE",
+            'Details': asset_details_exchange,
+            'BTC': float(btc_amount),
+            'Stablecoins': float(stable_amount),
+            'Color': config['color'],
+            'Logo': config['logo']
+        })
             
     return balance_data, float(total_net_worth), float(arbitrage_capital), float(total_btc), float(total_gold), asset_details
 
 @st.cache_data(ttl=5)
 def fetch_realtime_prices():
-    exchanges = initialize_exchanges()
+    snapshots = persistence_manager.get_market_snapshots()
+    exchanges_config = initialize_exchanges()
     price_data = []
     
-    for name, data in exchanges.items():
-        adapter = data['adapter']
-        start_time = time.time()
-        try:
-            # For dashboard, we try multiple pairs to show exchange health
-            ticker = adapter.get_ticker_price('BTC/USDT' if name == 'binance' else 'BTC/USD')
-            latency_ms = int((time.time() - start_time) * 1000)
+    for s in snapshots:
+        if s['symbol'] in ['BTC/USDT', 'BTC/USD']:
+            name = s['exchange']
+            config = exchanges_config.get(name, {'color': '#ffffff', 'logo': '?'})
             price_data.append({
                 'exchange': name.upper(),
-                'btc_price': float(ticker.value),
-                'latency_ms': latency_ms,
+                'btc_price': float(s['bid']),
+                'latency_ms': 0, # Snapshots are history
                 'status': 'ONLINE',
-                'bid': float(ticker.value * Decimal('0.9999')), # Mock bids/asks for UI
-                'ask': float(ticker.value * Decimal('1.0001')),
-                'color': data['color'],
-                'logo': data['logo']
-            })
-        except:
-            price_data.append({
-                'exchange': name.upper(),
-                'btc_price': 0,
-                'latency_ms': 0,
-                'status': 'OFFLINE',
-                'bid': 0,
-                'ask': 0,
-                'color': data['color'],
-                'logo': data['logo']
+                'bid': float(s['bid']),
+                'ask': float(s['ask']),
+                'color': config['color'],
+                'logo': config['logo']
             })
             
     return price_data
@@ -408,18 +367,14 @@ def get_recent_trades(limit=50):
     return []
 
 def get_bot_activity():
-    """Get latest bot activity from log file"""
+    """Get latest bot activity from SQLite trades."""
     try:
-        log_path = '/Users/dj3bosmacbookpro/Desktop/QUANT_bot/bot_log.log'
-        if os.path.exists(log_path):
-            with open(log_path, 'r') as f:
-                lines = f.readlines()
-                # Get last 20 lines, filter for important events
-                important_lines = []
-                for line in lines[-20:]:
-                    if any(keyword in line for keyword in ['ARBITRAGE', 'REBALANCE', 'ERROR', 'BOUGHT', 'SOLD', 'PROFIT']):
-                        important_lines.append(line.strip())
-                return important_lines[-5:] if important_lines else []
+        trades = persistence_manager.get_recent_trades(10)
+        if trades:
+            activities = []
+            for t in trades:
+                activities.append(f"{t['timestamp']} - {t['type']} {t['symbol']} on {t['exchange']} - Net: ${t['net_profit_usd']}")
+            return activities
     except:
         pass
     return []
@@ -462,8 +417,10 @@ def calculate_arbitrage_opportunities(price_data):
                 sell_fee_pct = 0.001
                 if 'KRAKEN' in buy_ex: buy_fee_pct = 0.0026
                 if 'COINBASE' in buy_ex: buy_fee_pct = 0.006
+                if 'BINANCE' in buy_ex: buy_fee_pct = 0.001
                 if 'KRAKEN' in sell_ex: sell_fee_pct = 0.0026
                 if 'COINBASE' in sell_ex: sell_fee_pct = 0.006
+                if 'BINANCE' in sell_ex: sell_fee_pct = 0.001
                 
                 total_fee_pct = (buy_fee_pct + sell_fee_pct) * 100
                 net_profit_pct = spread_pct - total_fee_pct
@@ -989,25 +946,27 @@ def main():
     
     with control_cols[1]:
         if st.button("BTC MODE", use_container_width=True, type="primary"):
-            try:
-                with open('/Users/dj3bosmacbookpro/Desktop/QUANT_bot/current_mode.txt', 'w') as f:
-                    f.write("BTC")
-                st.success("Switched to BTC Mode")
-                time.sleep(1)
-                st.rerun()
-            except:
-                st.error("Failed to switch mode")
+            persistence_manager.save_command('SWITCH_MODE', {'mode': 'BTC'})
+            st.success("Switching to BTC Mode...")
+            time.sleep(1)
+            st.rerun()
     
     with control_cols[2]:
         if st.button("GOLD MODE", use_container_width=True):
-            try:
-                with open('/Users/dj3bosmacbookpro/Desktop/QUANT_bot/current_mode.txt', 'w') as f:
-                    f.write("GOLD")
-                st.success("Switched to GOLD Mode")
-                time.sleep(1)
-                st.rerun()
-            except:
-                st.error("Failed to switch mode")
+            persistence_manager.save_command('SWITCH_MODE', {'mode': 'GOLD'})
+            st.success("Switching to GOLD Mode...")
+            time.sleep(1)
+            st.rerun()
+
+    # Manual Sweep Button (G-Bot)
+    st.markdown("---")
+    sweep_cols = st.columns([3, 1])
+    with sweep_cols[0]:
+        st.info("Sweep 15% of total profits into cold storage PAXG.")
+    with sweep_cols[1]:
+        if st.button("MANUAL SWEEP", use_container_width=True):
+            persistence_manager.save_command('G_SWEEP')
+            st.success("Manual sweep requested!")
     
     st.divider()
     
