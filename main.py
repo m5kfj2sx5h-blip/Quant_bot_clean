@@ -37,6 +37,7 @@ from domain.entities import TradingMode
 
 logger = get_logger(__name__)
 
+
 class SystemCoordinator:
     def __init__(self):
         self.config = self._load_config()
@@ -67,7 +68,7 @@ class SystemCoordinator:
         from adapters.exchanges.kraken import KrakenAdapter
         from adapters.exchanges.coinbase_regular import CoinbaseRegularAdapter
         from adapters.exchanges.coinbase_advanced import CoinbaseAdvancedAdapter
-        
+
         # 1. Restore Portfolio & Mode state from SQLite
         last_state = self.persistence_manager.load_last_state()
         if last_state:
@@ -81,7 +82,7 @@ class SystemCoordinator:
             'coinbase': CoinbaseRegularAdapter(),
             'coinbase_advanced': CoinbaseAdvancedAdapter()
         }
-        
+
         # 3. Initialize Feed & Registry
         self.data_feed = DataFeed(self.config, logger, self.market_registry)
         # Set up a fake exchange config if it's missing to allow data_feed to initialize enabled exchanges
@@ -97,7 +98,7 @@ class SystemCoordinator:
             await self.data_feed.start_websocket_feed()
         except Exception as e:
             logger.error(f"Failed to start WebSocket feed: {e}. Continuing with restricted data.")
-        
+
         # 4. Initialize Managers
         self.fee_manager = FeeManager(self.config, self.exchanges, self.market_registry)
         self.staking_manager = StakingManager(self.exchanges, self.config)
@@ -105,11 +106,11 @@ class SystemCoordinator:
         self.health_monitor = HealthMonitor(self.portfolio, self._handle_alert, self.config, logger, self.market_registry)
         self.risk_manager = RiskManager(self.portfolio, self.config)
         self.arbitrage_analyzer = ArbitrageAnalyzer(self.config, logger)
-        
+
         # 5. Initialize Registry Worker
         self.registry_worker = RegistryWorker(self.market_registry, self.exchanges)
         asyncio.create_task(self.registry_worker.start())
-        
+
         # 6. Finalize Mode & Money Managers
         self.mode_manager = ModeManager(self.portfolio, os.getenv('WEBHOOK_PASSPHRASE'))
         if last_state and last_state.get('current_mode'):
@@ -120,20 +121,20 @@ class SystemCoordinator:
                 logger.warning(f"Could not restore mode from persistence: {e}")
 
         self.money_manager = MoneyManager('config/settings.json', self.exchanges, self.staking_manager, self.signals_server, self.mode_manager, self.market_registry, self.portfolio)
-        
+
         # Signal Server handles both Macro and Sniper (ABot) signals
         self.signals_server = SignalServer(
             macro_callback=self.handle_mode_change,
             abot_callback=self.handle_abot_signal
         )
         self.signals_server.start()
-        
+
         # Initial bot check based on current mode
         await self.update_bot_states()
-        
+
         # Link money manager to signals server if needed
         self.money_manager.signals_manager = self.signals_server
-        
+
         logger.info("🚀 SYSTEM COORDINATOR Initialized")
 
     async def _handle_alert(self, level: str, message: str):
@@ -146,12 +147,12 @@ class SystemCoordinator:
     async def handle_mode_change(self, mode_str: str):
         """Callback for SignalServer when a macro mode change is received."""
         logger.info(f"Processing mode change to {mode_str}")
-        
+
         # Capture Snapshot TPV at the time of signal for dynamic scaling
         if self.portfolio:
             self.portfolio.snapshot_tpv_at_signal = self.portfolio.total_value_usd
             logger.info(f"Snapshot TPV at mode switch: ${self.portfolio.snapshot_tpv_at_signal:,.2f}")
-            
+
         success = await self.mode_manager.handle_tradingview_signal({
             'mode': mode_str.lower() + '_mode',
             'confidence': 1.0,
@@ -176,9 +177,9 @@ class SystemCoordinator:
         # Q-Bot is always active in both modes (85% in BTC, 15% in GOLD)
         if 'qbot' not in self.bots:
             self.bots['qbot'] = QBot(
-                self.config, 
-                self.exchanges, 
-                fee_manager=self.fee_manager, 
+                self.config,
+                self.exchanges,
+                fee_manager=self.fee_manager,
                 risk_manager=self.risk_manager,
                 health_monitor=self.health_monitor,
                 market_registry=self.market_registry,
@@ -188,15 +189,15 @@ class SystemCoordinator:
                 data_feed=self.data_feed
             )
             # Start Q-Bot loop if it has one
-        
+
         # A-Bot: active only during BTC mode
         if current_mode == TradingMode.BTC_MODE:
             if 'abot' not in self.bots:
                 logger.info("Initializing A-Bot (BTC Mode)")
                 self.bots['abot'] = ABot(
-                    self.config, 
-                    self.exchanges, 
-                    self.staking_manager, 
+                    self.config,
+                    self.exchanges,
+                    self.staking_manager,
                     self.fee_manager,
                     market_registry=self.market_registry,
                     portfolio=self.portfolio,
@@ -213,8 +214,8 @@ class SystemCoordinator:
             if 'gbot' not in self.bots:
                 logger.info("Initializing G-Bot (GOLD Mode)")
                 self.bots['gbot'] = GBot(
-                    self.config, 
-                    self.exchanges, 
+                    self.config,
+                    self.exchanges,
                     self.fee_manager,
                     market_registry=self.market_registry,
                     portfolio=self.portfolio,
@@ -230,7 +231,7 @@ class SystemCoordinator:
     async def run(self):
         """Main execution loop for all active bots and monitors."""
         logger.info("🎬 Starting SYSTEM COORDINATOR Execution Loop")
-        
+
         try:
             tasks = [
                 self.health_monitor.start(),
@@ -286,7 +287,7 @@ class SystemCoordinator:
                         if self.persistence_manager:
                             # Snapshot Portfolio
                             self.persistence_manager.update_portfolio_state(
-                                self.portfolio, 
+                                self.portfolio,
                                 self.mode_manager.get_current_mode().value
                             )
                         self.last_money_check = time.time()
@@ -297,13 +298,13 @@ class SystemCoordinator:
                 if 'qbot' in self.bots:
                     # Fetch live balances for sizing
                     balances = {name: self.exchanges[name].get_balance('USDT') for name in self.exchanges}
-                    
+
                     # Cross-exchange scan
                     cross_opps = await self.bots['qbot'].scan_cross_exchange(balances)
                     for opp in sorted(cross_opps, key=lambda x: x['net_profit_pct'], reverse=True):
                         success = await self.bots['qbot'].execute_cross_exchange(opp)
-                        if success: break # Only one cross-ex per cycle to avoid double-spending same balance
-                    
+                        if success: break  # Only one cross-ex per cycle to avoid double-spending same balance
+
                     # Triangular scan for each enabled exchange
                     for ex in self.exchanges:
                         tri_opps = await self.bots['qbot'].scan_triangular(ex, balances.get(ex, Decimal('0')))
@@ -320,7 +321,7 @@ class SystemCoordinator:
                 # 4. G-Bot Periodic Accumulation (GOLD Mode)
                 if 'gbot' in self.bots:
                     # If in GOLD mode, ensure 85% of snapshot capital is in PAXG
-                    paxg_price = Decimal('2500') # Dynamic fallback
+                    paxg_price = Decimal('2500')  # Dynamic fallback
                     if self.market_registry:
                         for ex in self.exchanges:
                             book = self.market_registry.get_order_book(ex, 'PAXG/USDT')
@@ -328,18 +329,18 @@ class SystemCoordinator:
                                 paxg_price = Decimal(str(book.get('bid', book['bids'][0]['price'])))
                                 break
 
-                    total_paxg_value = sum(self.exchanges[ex].get_balance('PAXG') * 
-                                          paxg_price for ex in self.exchanges)
-                    
+                    total_paxg_value = sum(self.exchanges[ex].get_balance('PAXG') *
+                                           paxg_price for ex in self.exchanges)
+
                     # Target is 85% of capital AT TIME OF SIGNAL
                     snapshot_tpv = self.portfolio.snapshot_tpv_at_signal if self.portfolio.snapshot_tpv_at_signal > 0 else self.portfolio.total_value_usd
                     target_gold = snapshot_tpv * Decimal('0.85')
-                    
+
                     if total_paxg_value < target_gold:
                         diff = target_gold - total_paxg_value
-                        if diff > Decimal('100'): # Minimum buy
+                        if diff > Decimal('100'):  # Minimum buy
                             self.bots['gbot'].accumulate_paxg(diff)
-                
+
                 await asyncio.sleep(self.config.get('cycle_times', {}).get('main_loop_sec', 10))
             except Exception as e:
                 logger.error(f"Error in main bot loop: {e}", exc_info=True)
@@ -355,11 +356,15 @@ class SystemCoordinator:
         if self.data_feed:
             self.data_feed.running = False
 
-if __name__ == "__main__":
+
+async def main():
     coord = SystemCoordinator()
+    await coord.initialize()
+    await coord.run()
+
+
+if __name__ == "__main__":
     try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(coord.initialize())
-        loop.run_until_complete(coord.run())
+        asyncio.run(main())
     except KeyboardInterrupt:
         pass
