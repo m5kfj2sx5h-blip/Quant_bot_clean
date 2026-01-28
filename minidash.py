@@ -1,9 +1,14 @@
 from flask import Flask, render_template_string, request, redirect
 import os
 from dotenv import load_dotenv, set_key
-from utils.utils import shared_state, log
+# from utils.utils import shared_state, log # Removed legacy
 from manager.mode import ModeManager  # Import if needed for webhook
 from bot.A import ABot
+
+# Dummy for legacy UI support
+shared_state = {'mode': 'BTC', 'pnl': 0, 'paxg_cold': 0, 'alerts': []}
+def log(msg): print(f"LOG: {msg}")
+
 app = Flask(__name__)
 
 # Casio UI with dynamic data, green-black style

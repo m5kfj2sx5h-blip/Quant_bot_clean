@@ -26,35 +26,15 @@ class FeeManager:
         for name, exchange in self.exchanges.items():
             for attempt in range(self.retry_count):
                 try:
-                    fees = exchange.fetch_fees() or exchange.fetch_trading_fees()
-                    if name == 'binanceus':
-                        account_info = exchange.client.account()  # Official SDK
-                        taker = Decimal(str(account_info.get('takerCommission', 0.001)))
-                        maker = Decimal(str(account_info.get('makerCommission', 0.001)))
-                        bnb_discount = account_info.get('canUseBnbForFees', False)
-                    elif name == 'kraken':
-                        trade_volume = exchange.client.privatePostTradeVolume()
-                        taker = Decimal(str(trade_volume.get('fees', {}).get('taker', 0.0026)))
-                        maker = Decimal(str(trade_volume.get('fees', {}).get('maker', 0.0016)))
-                        bnb_discount = False
-                    elif name == 'coinbase':
-                        fees_info = exchange.client.get_fees()
-                        taker = Decimal(str(fees_info.get('taker_fee_rate', 0.006)))
-                        maker = Decimal(str(fees_info.get('maker_fee_rate', 0.004)))
-                        bnb_discount = False
-                    elif name == 'coinbase_advanced':
-                        fees_info = exchange.client.get_fees()
-                        taker = Decimal(str(fees_info.get('taker_fee_rate', 0.006)))
-                        maker = Decimal(str(fees_info.get('maker_fee_rate', 0.004)))
-                        bnb_discount = False
+                    fees_standard = exchange.fetch_fees()
                     self.fee_structures[name] = FeeStructure(
                         exchange=name,
-                        maker_fee=maker,
-                        taker_fee=taker,
-                        bnb_discount=bnb_discount
+                        maker_fee=fees_standard['maker'],
+                        taker_fee=fees_standard['taker'],
+                        bnb_discount=fees_standard['bnb_discount']
                     )
-                    self._cache[name] = {'fees': fees, 'timestamp': time.time()}
-                    logger.info(f"Fetched fees from API for {name}")
+                    self._cache[name] = {'fees': fees_standard['raw'], 'timestamp': time.time()}
+                    logger.info(f"Fetched standardized fees from Port for {name}")
                     break
                 except Exception as e:
                     logger.warning(f"Fee fetch attempt {attempt+1} failed for {name}: {e}")

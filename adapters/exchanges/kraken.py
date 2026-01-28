@@ -1,4 +1,4 @@
-from kraken.spot import Spot as KrakenSpot
+from kraken.spot import SpotClient as KrakenSpot
 from decimal import Decimal
 from typing import Dict, List, Any, Optional
 from domain.entities import Symbol
@@ -55,9 +55,15 @@ class KrakenAdapter:
             return Price(Decimal(ticker[pair_key]['c'][0]))
         return Price(Decimal(ticker['c'][0]))
 
-    def fetch_trading_fees(self) -> Dict:
-        """Fetch trading fees for Kraken"""
-        return self.client.trade_volume()
+    def fetch_fees(self) -> Dict[str, Any]:
+        """Fetch standardized fee structure for Kraken."""
+        trade_volume = self.client.trade_volume()
+        return {
+            'maker': Decimal(str(trade_volume.get('fees', {}).get('maker', 0.0016))),
+            'taker': Decimal(str(trade_volume.get('fees', {}).get('taker', 0.0026))),
+            'bnb_discount': False,
+            'raw': trade_volume
+        }
 
     def get_market_metadata(self) -> Dict[str, Any]:
         """Fetch all spot trading pairs metadata in one bulk call."""

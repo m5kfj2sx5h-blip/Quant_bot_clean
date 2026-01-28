@@ -42,10 +42,26 @@ class MacroSignal:
 class MarketContext:
     """Tracks and analyzes market context for intelligent trading."""
 
-    def __init__(self, config: Dict, logger: logging.Logger):
+    def __init__(self, primary_symbol: str = None, config: Dict = None, logger: logging.Logger = None):
         """Initialize market context."""
-        self.config = config
-        self.logger = logger
+        self.primary_symbol = primary_symbol
+        self.config = config or {}
+        self.logger = logger or logging.getLogger(__name__)
+        self.timestamp = time.time()
+        
+        # Core Metrics
+        self.auction_state = AuctionState.OPEN
+        self.market_phase = MarketPhase.SIDEWAYS
+        self.auction_imbalance_score = Decimal('0')
+        self.crowd_behavior = "balanced"
+        self.market_sentiment = 0.0
+        self.execution_confidence = 0.5
+        self.volume_strength = 0.0
+        
+        # Support/Resistance
+        self.key_support = None
+        self.key_resistance = None
+        
         self.context = {
             'volatility': 'NORMAL',
             'trend': 'NEUTRAL',
@@ -73,7 +89,19 @@ class MarketContext:
         self.price_history = {}
         self.volume_history = {}
         self.order_book_history = {}
-        self.logger.info("Market context initialized")
+        self.logger.info(f"Market context initialized for {primary_symbol}")
+
+    def to_dict(self) -> Dict:
+        """Serialize context for logging/dashboard."""
+        return {
+            'symbol': self.primary_symbol,
+            'state': self.auction_state.value if hasattr(self.auction_state, 'value') else str(self.auction_state),
+            'phase': self.market_phase.value if hasattr(self.market_phase, 'value') else str(self.market_phase),
+            'imbalance': float(self.auction_imbalance_score),
+            'behavior': self.crowd_behavior,
+            'sentiment': self.market_sentiment,
+            'confidence': self.execution_confidence
+        }
 
     def update(self, new_context: Dict):
         """Update market context with new information."""

@@ -60,8 +60,15 @@ class BinanceUSAdapter:
             params['timeInForce'] = 'GTC'
         return self.client.new_order(**params)
 
-    def fetch_fees(self) -> Dict:
-        return self.client.account()
+    def fetch_fees(self) -> Dict[str, Any]:
+        """Fetch standardized fee structure."""
+        account_info = self.client.account()
+        return {
+            'maker': Decimal(str(account_info.get('makerCommission', 0.001))),
+            'taker': Decimal(str(account_info.get('takerCommission', 0.001))),
+            'bnb_discount': account_info.get('canUseBnbForFees', False),
+            'raw': account_info
+        }
 
     def get_market_metadata(self) -> Dict[str, Any]:
         """Fetch all spot trading pairs metadata in one bulk call."""

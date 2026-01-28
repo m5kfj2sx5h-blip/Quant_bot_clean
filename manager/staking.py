@@ -33,20 +33,24 @@ class StakingManager:
         for name, exchange in self.exchanges.items():
             for attempt in range(self.retry_count):
                 try:
+                    # Unified Port Access
                     staking_assets = exchange.get_staking_assets()
                     for asset in staking_assets:
-                        coin = asset.get('symbol')
-                        apr = Decimal(str(asset.get('apr', 0.0)))
-                        bond_days = Decimal(str(asset.get('bond_period_days', 0)))
-                        if apr < self.min_apr:
+                        # Normalize key names across SDKs inside the Adapter in next version
+                        # but for now we handle common variations
+                        coin = asset.get('symbol') or asset.get('coin') or asset.get('asset_id')
+                        apr = Decimal(str(asset.get('apr') or asset.get('apy') or asset.get('reward_rate', 0.0)))
+                        bond_days = Decimal(str(asset.get('bond_period_days') or asset.get('unbonding_period', 0)))
+                        
+                        if not coin or apr < self.min_apr:
                             continue
-                        self.aprs[coin] = {'apr': apr, 'bond_days': bond_days, 'exchange': name}
-                        logger.info(f"Fetched staking rewards from API for {coin} on {name}")
+                        self.aprs[coin.upper()] = {'apr': apr, 'bond_days': bond_days, 'exchange': name}
+                        logger.info(f"Ported staking rewards for {coin} on {name}: {apr}%")
                     break
                 except Exception as e:
                     logger.warning(f"Staking fetch attempt {attempt+1} failed for {name}: {e}")
                     if attempt == self.retry_count - 1:
-                        raise Exception(f"Failed to fetch staking for {name}")
+                        logger.error(f"Failed to fetch staking for {name}")
                     time.sleep(1)
         self._cache[cache_key] = {'data': self.aprs, 'timestamp': time.time()}
 

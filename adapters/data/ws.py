@@ -5,7 +5,6 @@ import time
 import websockets
 from dotenv import load_dotenv
 import os
-from coinbase.advanced.client import AdvancedTradeClient as CoinbaseAdvancedClient
 
 load_dotenv()
 
@@ -118,7 +117,7 @@ class KrakenWebSocket:
 
 class CoinbaseWebSocket:
     def __init__(self, product_ids: str = "BTC-USD"):
-        self.uri = "wss://advanced-trade-ws.coinbase.com"
+        self.uri = "wss://ws-feed.exchange.coinbase.com" # Legacy Pro URI
         self.ws = None
         self.product_ids = product_ids
         self.logger = logging.getLogger(__name__)
@@ -127,23 +126,22 @@ class CoinbaseWebSocket:
     async def connect(self):
         try:
             self.ws = await websockets.connect(self.uri)
-            self.logger.info("✅ Coinbase WebSocket connected")
+            self.logger.info("✅ Coinbase (Regular) WebSocket connected")
             subscribe_msg = {
                 "type": "subscribe",
-                "channel": "level2",
-                "product_ids": [self.product_ids]
+                "channels": [{"name": "level2", "product_ids": [self.product_ids]}]
             }
             await self.ws.send(json.dumps(subscribe_msg))
             asyncio.create_task(self._listen())
         except Exception as e:
-            self.logger.error(f"Coinbase connection failed: {e}")
+            self.logger.error(f"Coinbase Regular connection failed: {e}")
             raise
 
     async def _listen(self):
         try:
             async for message in self.ws:
                 data = json.loads(message)
-                if data.get('channel') == 'level2':
+                if data.get('type') == 'snapshot' or data.get('type') == 'l2update':
                     book_data = {
                         'exchange': 'coinbase',
                         'type': 'orderbook',
@@ -151,9 +149,14 @@ class CoinbaseWebSocket:
                         'asks': [[float(a[0]), float(a[1])] for a in data.get('asks', [])[:10]],
                         'timestamp': time.time() * 1000
                     }
+                    if data.get('type') == 'l2update':
+                        # Simplification for update vs snapshot
+                        book_data['bids'] = [[float(u[1]), float(u[2])] for u in data.get('changes', []) if u[0] == 'buy']
+                        book_data['asks'] = [[float(u[1]), float(u[2])] for u in data.get('changes', []) if u[0] == 'sell']
+                    
                     await self._notify_callbacks(book_data)
         except Exception as e:
-            self.logger.error(f"Coinbase listen error: {e}")
+            self.logger.error(f"Coinbase Regular listen error: {e}")
 
     def subscribe(self, callback):
         self.callbacks.append(callback)
@@ -168,7 +171,7 @@ class CoinbaseWebSocket:
 # Add Coinbase Advanced WebSocket
 class CoinbaseAdvancedWebSocket:
     def __init__(self, product_ids: str = "BTC-USD"):
-        self.uri = "wss://advanced-trade-ws.coinbase.com"  # From docs
+        self.uri = "wss://advanced-trade-ws.coinbase.com" 
         self.ws = None
         self.product_ids = product_ids
         self.logger = logging.getLogger(__name__)
@@ -178,10 +181,11 @@ class CoinbaseAdvancedWebSocket:
         try:
             self.ws = await websockets.connect(self.uri)
             self.logger.info("✅ Coinbase Advanced WebSocket connected")
+            # Official pattern for Advanced Trade
             subscribe_msg = {
                 "type": "subscribe",
                 "product_ids": [self.product_ids],
-                "channel_names": ["level2"]
+                "channel": "l2_data"
             }
             await self.ws.send(json.dumps(subscribe_msg))
             asyncio.create_task(self._listen())
@@ -193,7 +197,22 @@ class CoinbaseAdvancedWebSocket:
         try:
             async for message in self.ws:
                 data = json.loads(message)
-                if data.get('channel') == 'level2':
+                # Official Advanced Trade WS format handling
+                if 'channel' in data and data['channel'] == 'l2_data':
+                    events = data.get('events', [])
+                    for event in events:
+                        if event.get('type') == 'snapshot' or event.get('type') == 'update':
+                            updates = event.get('updates', [])
+                            book_data = {
+                                'exchange': 'coinbase_advanced',
+                                'type': 'orderbook',
+                                'bids': [[float(u['price']), float(u['new_quantity'])] for u in updates if u['side'] == 'bid'],
+                                'asks': [[float(u['price']), float(u['new_quantity'])] for u in updates if u['side'] == 'offer'],
+                                'timestamp': time.time() * 1000
+                            }
+                            await self._notify_callbacks(book_data)
+                elif 'channel' in data and data['channel'] == 'level2':
+                    # Support for standard level2 if used
                     book_data = {
                         'exchange': 'coinbase_advanced',
                         'type': 'orderbook',
