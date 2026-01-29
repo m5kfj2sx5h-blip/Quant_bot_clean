@@ -31,6 +31,7 @@ System Components
 	* Checks account balances periodically.
 	* If [Q-Bot] arbitrage money becomes too uneven between accounts (>35% drift), signals [TRANSFER MANAGER] AND [CONVERSION MANAGER] to move USDT/USDC across accounts to even it out THE cheapest way.
 	* Does not interrupt [Q-Bot]
+    * During BOTTLENECK mode (when drift >35%) it checks which is quicker & more profitable option to rebalance accounts max transfers x2/week.
 	* Tells [TRANSFER MANAGER] AND [CONVERSION MANAGER] what it needs to maintain the ideal portfolio proportions across accounts for arbitrage.
 	* MULTIPLE JOBS: Divide and allocate capital. Prevent capital from accumulating in one account. 
 6. [CONVERSION MANAGER]
@@ -38,7 +39,7 @@ System Components
 	* Does not interrupt [Q-Bot]
 	* One job: Reduces the amount needed to transfer by prioritizing internal triangular conversions (intra-exchange) over any cross-account transfers whenever possible to eliminate transfer fees entirely.
 7. [TRANSFER MANAGER] 
-	* Transfers USDT OR USDC across accounts after calculating the speed of transfer and transfer fees across accounts
+	* Transfers USDT OR USDC (stable coins preferably over crypto) across accounts after calculating the speed of transfer and transfer fees across accounts
 	* Receives transfer route from [CONVERSION MANAGER].
 	* Does not interrupt [Q-Bot]
 	* Always queries real-time network fees & times, at execution time and select the cheapest + fastest shared network between sender/receiver
@@ -126,7 +127,7 @@ System Components
 
 #### STEP1 "ACCEPT IMBALANCE - PROFIT OVER PERFECTION!"
 the bot does not trade because drift is set at 15%. Increase to 35%. 
-At no point in time should [Q-Bot] be interupted! 
+At no point in time should [Q-Bot] be interrupted! 
 If one account has no BTC and only stable coins or no stable coins and only BTC. 
 It should be able to still buy with that BTC, ETH or SOL!
 It should have zero issues with buying any crypto if all it has is stable coin!
