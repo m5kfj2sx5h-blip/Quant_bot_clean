@@ -45,27 +45,34 @@ System Components
 	* Kraken <-> Binance.US can use USDT/USDC
     * Coinbase <-> Binance.US/KRAKEN use USDC ONLY!
     * ADDRESSES & networks:
-      ##### BINANCE.US - Deposit USDT:
+      ##### BINANCE.US Wallets:
 		- Network_SOL: 6nVkZ9DhUGpCSikwmwykjZkPCJkQEASVKKnrEScj3Ya8
-		- Network_AVAX C-Chain: 0x9433ef65333256178a317bdefb8c18ad49b22350 
-		- Network_TRON (TRC20): THiAU5ReTWR9TBWVTv1WRKBY7j9qeZXFkw
-      ##### BINANCE.US - Deposit USDC:
-		- Network_SOL: 6nVkZ9DhUGpCSikwmwykjZkPCJkQEASVKKnrEScj3Ya8
-		- Network_AVAX C-Chain: 0x9433ef65333256178a317bdefb8c18ad49b22350
-      ##### KRAKEN - Deposit USDT: 
+          - deposit: USDT, USDC, SOL
+        - Network_AVAX C-Chain: 0x9433ef65333256178a317bdefb8c18ad49b22350
+          - deposit: USDT, USDC
+        - Network_TRON (TRC20): THiAU5ReTWR9TBWVTv1WRKBY7j9qeZXFkw
+          - deposit: USDT
+      ##### KRAKEN Wallets: 
 		- Network_SOL: FnFSRzQDSa1kfFKABS6onFid1yncwYC6TqKcCXe2bcQa
+          - deposit : USDC, USDT, SOL
 		- Network_AVAX C-Chain: 0x18791c1Ec171169B4E599A01D280a325500f1BB5
-		- Network_TRON (TRC20): TLEvYy9aYUztMYqxvXcLshEdvqWwNFysMK
-      ##### KRAKEN - Deposit USDC: 
-		- Network_SOL: FnFSRzQDSa1kfFKABS6onFid1yncwYC6TqKcCXe2bcQa
-		- Network_AVAX C-Chain: 0x18791c1Ec171169B4E599A01D280a325500f1BB5
+          - deposit: USDC, USDT
 		- Network_Sui: 0x29d57083b1b274d6e78155c147f87a9964b8a9e0e28b890ec10a984447e35eab
+          - deposit: USDC, SUI
 		- Network_Algo: SMN5HNKR45Z6GB546A5KRI2AGODAYKSPMXLGL5PB5SFY6URD4MANLLAPKI
-      ##### Coinbase Deposit USDC ONLY!:
+          - deposit: USDC
+		- Network_TRON (TRC20): TLEvYy9aYUztMYqxvXcLshEdvqWwNFysMK
+          - deposit: USDT
+      ##### Coinbase USDC ONLY Wallets:
 		- Network_SOL: rfXgbu6jQVgEThszwPBvCgHPq2LX59m4qZSLbneqczw
 		- Network_AVAX C-Chain: 0x27FA5C63e7f7c2D07b349A8F44cc29870A32f8C6
 		- Network_Sui: 0xc8cb27799a08da6f64e77f1267d3330fb5e01b13d6cbad1914e81ce069dc4ed6
 		- Network_Algo: XFDI7INMVW32QUKO4QRBHNOIGSNA5AOX2MVWP5DHH3PUXX4JOCPWBF46AU
+      ##### Coinbase Alt Wallets:
+        - Network_SOL_2: Ch2d4gvee8jnJ384xacj4bsp3YWKAG9yMDS2u2MeWmcw
+          - deposit: SOL 
+        - Network_Sui_2: 0xf36f79b4353442fe95b5ddeaa2dafeada617d67b598ea1cf0d3d41a3153e5e61
+          - deposit: SUI
 	* Adds safety check: Minimum transfer size $500+ (to avoid dust/minimums; simulate net cost (fee + slippage) before transferring).
 	* One job: Keep average transfer cost per rebalance <$1 (achievable on above networks), ensuring operational costs stay <0.5% of capital annually.
 8. [Q-Bot]
