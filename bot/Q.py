@@ -239,7 +239,7 @@ class QBot:
                 # Triangular Arb Logic: Buy1 -> Sell2 -> Sell3 (USDT -> BTC -> ETH -> USDT)
                 # Leg 1: Buy BTC with USDT (Ask)
                 ask1 = books[0]['asks'][0]['price']
-                # Leg 2: Sell BTC for ETH (Bid) - Wait, ETH/BTC usually means Sell BTC for ETH or Buy ETH with BTC?
+                # Leg 2: Sell BTC for ETH (Bid)
                 # If path is [BTC/USDT, ETH/BTC, ETH/USDT]:
                 # 1. Buy BTC with USDT (Ask BTC/USDT)
                 # 2. Buy ETH with BTC (Ask ETH/BTC)

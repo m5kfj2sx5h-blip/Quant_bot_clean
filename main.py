@@ -66,8 +66,8 @@ class SystemCoordinator:
     async def initialize(self):
         from adapters.exchanges.binanceus import BinanceUSAdapter
         from adapters.exchanges.kraken import KrakenAdapter
-        from adapters.exchanges.coinbase_regular import CoinbaseRegularAdapter
-        from adapters.exchanges.coinbase_advanced import CoinbaseAdvancedAdapter
+        from adapters.exchanges.coinbase_reg import CoinbaseRegularAdapter
+        from adapters.exchanges.coinbase_adv import CoinbaseAdvancedAdapter
 
         # 1. Restore Portfolio & Mode state from SQLite
         last_state = self.persistence_manager.load_last_state()
