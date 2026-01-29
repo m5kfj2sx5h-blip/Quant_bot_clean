@@ -29,14 +29,14 @@ System Components
 	* Tracks every penny.
 	* Divides the capital for ALL.
 	* Checks account balances periodically.
-	* If [Q-Bot] arbitrage money becomes too uneven between accounts (>15% drift), signals [TRANSFER MANAGER] AND [CONVERSION MANAGER] to move USDT/USDC across accounts to even it out THE cheapest way.
+	* If [Q-Bot] arbitrage money becomes too uneven between accounts (>35% drift), signals [TRANSFER MANAGER] AND [CONVERSION MANAGER] to move USDT/USDC across accounts to even it out THE cheapest way.
 	* Does not interrupt [Q-Bot]
 	* Tells [TRANSFER MANAGER] AND [CONVERSION MANAGER] what it needs to maintain the ideal portfolio proportions across accounts for arbitrage.
 	* MULTIPLE JOBS: Divide and allocate capital. Prevent capital from accumulating in one account. 
 6. [CONVERSION MANAGER]
-	* It tries to keep drift <10% across exchanges by INTRA-EXCHANGE triangular conversions.
+	* It tries to keep drift <15% across exchanges by PROFITABLE INTRA-EXCHANGE triangular conversions (min profit >=1.5%).
 	* Does not interrupt [Q-Bot]
-	* One job: Reduces the amount needed to transfer by prioritizing triangular conversions (intra-exchange) over any cross-account transfers whenever possible to eliminate transfer fees entirely.
+	* One job: Reduces the amount needed to transfer by prioritizing internal triangular conversions (intra-exchange) over any cross-account transfers whenever possible to eliminate transfer fees entirely.
 7. [TRANSFER MANAGER] 
 	* Transfers USDT OR USDC across accounts after calculating the speed of transfer and transfer fees across accounts
 	* Receives transfer route from [CONVERSION MANAGER].
@@ -70,7 +70,14 @@ System Components
 	* One job: Keep average transfer cost per rebalance <$1 (achievable on above networks), ensuring operational costs stay <0.5% of capital annually.
 8. [Q-Bot]
 	* SIMPLE Cross Exchange Arbitrage (80% of [Q-Bot] capital) (10s cycles)
-	* TRIANGULAR Arbitrage (20% of [Q-Bot] Capital) (30s cycles)
+      * [BTC/USD/USDT/USDC]
+      * [ETH/USD/USDT/USDC]
+      * [SOL/USD/USDT/USDC]
+	* TRIANGULAR Cross Exchange Arbitrage (20% of [Q-Bot] Capital) (30s cycles)
+      * [X <-> Y <-> USD/USDT/USDC] 
+      * [X <-> USD/USDT/USDC <-> Y]
+      * [USD/USDT/USDC <-> X <-> Y]
+      *  X or Y = BTC/ETH/SOL
 	* BOTH:
 	    * Run in tight continuous loops (independent parallel threads).
 	    * Subscribes to fast WS data.
@@ -109,6 +116,15 @@ System Components
 
 ### Current Refactor Goal (Hexagonal Architecture)
 ***TASK***
+
+#### STEP1 "ACCEPT IMBALANCE - PROFIT OVER PERFECTION!"
+the bot does not trade because drift is set at 15%. Increase to 35%. 
+At no point in time should [Q-Bot] be interupted! 
+If one account has no BTC and only stable coins or no stable coins and only BTC. 
+It should be able to still buy with that BTC, ETH or SOL!
+It should have zero issues with buying any crypto if all it has is stable coin!
+the point is, transfers are only a last resort!
+
 The refactor is currently incomplete, unorganized, but functional. However as you can see from the most recent logs, account drift is disabling function. This is unnacceptable, I made a bottleneck mode specifically to keep [Q-Bot] running despite drift being more than 15%!
 
 Review the links attached, they have all the answers. I want to modify the three prompts below to address all the changes i want to make.
@@ -119,7 +135,8 @@ https://github.com/coinbase/coinbase-advanced-py/
 https://docs.kraken.com/api/docs/guides/global-intro
 https://docs.binance.us/#introduction
 
-updates i would like to add:
+##### STEP2 "VRAM IS GREAT - BUT WE STILL NEED TO AGGREGATE QUARTERLY MARKET DATA FOR BETTER CALCULATIONS"
+***updates to do*** updates i would like to add:
 
 Prompt 1: Add MarketData (Foundation – run this first)
 
@@ -151,7 +168,8 @@ Output: Diffs only for manager/market_data.py (new), bot/Q.py, config files.
 Include one test: mock 2 symbols with prices/books, verify get_volatility and get_market_means.
 Implement precisely.
 
-
+##### STEP 3 "PREMUIM [Q-Bot] & conversion.py EDITION - NEEDS TO BE APPLIED TO BOTH TRIANGULAR ARBITRAGES - Efficient Triangular Arbitrage Detection via Graph Neural Networks"
+SEARCH ONLINE TO LEARN HOW TO BEST APPLY THIS TO OUR STRATEGY:
 Prompt 2: Add GNN Arbitrage Detection (Update 1 – after aggregator is in)
 You are a senior Python developer for crypto bots. Additions only, no changes to existing logic.
 
@@ -180,7 +198,8 @@ Output: Diffs for requirements.txt, manager/conversion.py, bot/Q.py, config file
 One test: mock small graph (3 assets, 3 edges), expect cycle list.
 Implement step-by-step.
 
-
+##### STEP 4 "PREMUIM [A-Bot] EDITION - QUADRANT ALPHA SNIPER"
+SEARCH ONLINE TO LEARN HOW TO BEST APPLY THIS TO OUR STRATEGY:
 Prompt 3: Add Coin Quadrant Alpha Sniper (Update 2 – last)
 You are a senior Python developer for crypto bots. Additions only.
 
