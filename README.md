@@ -1,4 +1,4 @@
-_FIXED is the only working branch
+### _FIXED is the only working branch
 
 ## Project Goal & Hexagonal Refactor Instructions
 This is a cryptocurrency arbitrage and hedging bot designed for a ~$10,000 budget in January 2026.
@@ -12,12 +12,12 @@ Macro Signal:
 	* Fired (BUY BTC/SELL PAXG) on Nov 2023 = BTC Mode
 	* Fired another signal on Nov 2025 (SELL BTC/BUY PAXG) = GOLD Mode.
 Capital Allocation:
-	* BTC Mode: 85% → [[Q-Bot]], 15% → [[A-Bot]], 0% → [[G-Bot]]
-	* GOLD Mode: 15% → [[Q-Bot]], 0% → [[A-Bot]], 85% → [[G-Bot]]
+	* BTC Mode: 85% → [Q-Bot], 15% → [A-Bot], 0% → [G-Bot]
+	* GOLD Mode: 15% → [Q-Bot], 0% → [A-Bot], 85% → [G-Bot]
 System Components
 1. [SIGNAL RECEIVER]
-	* Listens for TradingView alerts (Macro Signal (mode flip) AND A-Bot (buy/sell) signals.
-	* When something arrives, it immediately tells the Mode Manager or A-Bot when to buy/sell not what to do.
+	* Listens for TradingView alerts (Macro Signal (mode flip) AND [A-Bot] (buy/sell) signals.
+	* When something arrives, it immediately tells the Mode Manager or [A-Bot] when to buy/sell not what to do.
 	* One job: Listens for TradingView alerts and passes them on. No polling, no timing.
 2. [MODE MANAGER]
 	* Holds the current state: BTC mode or GOLD mode.
@@ -27,32 +27,52 @@ System Components
 	* One job: remember the mode and announce/apply changes.
 5. [MONEY MANAGER]
 	* Tracks every penny.
-	* Divides the capital.
-	* Checks account balances periodically (every few minutes).
-	* If money is too uneven between exchanges (>15% drift), signals [TRANSFER MANAGER] AND [CONVERSION MANAGER] to move stablecoins to even it out (cheapest way).
-	* Maintains a min dynamic BNB balance (logic already done).
-	* Tells [TRANSFER MANAGER] AND [CONVERSION MANAGER] what it needs to maintain the ideal portfolio proportions across accounts for arbitrage, staking and gold sweeps!
-	* One job: prevent capital from getting stuck in one account, divide and protect the shared fuel.
+	* Divides the capital for ALL.
+	* Checks account balances periodically.
+	* If [Q-Bot] arbitrage money becomes too uneven between accounts (>15% drift), signals [TRANSFER MANAGER] AND [CONVERSION MANAGER] to move USDT/USDC across accounts to even it out THE cheapest way.
+	* Does not interrupt [Q-Bot]
+	* Tells [TRANSFER MANAGER] AND [CONVERSION MANAGER] what it needs to maintain the ideal portfolio proportions across accounts for arbitrage.
+	* MULTIPLE JOBS: Divide and allocate capital. Prevent capital from accumulating in one account. 
 6. [CONVERSION MANAGER]
-	* It is responsible for all conversions from one form of money to another outside triangular arbitrage.
-	* It is basically an on demand triangular arbitrage machine with specified pairs and finds the cheapest AND fastest routes for the [MONEY MANAGER].
-	* It tries to keep the drift across accounts below 15% by intra-exchange triangular conversions, so [[Q-bot]] runs smoothly.
-	* Does not interrupt arbitrage system
-	* One job: Reduces the amount needed to transfer by prioritizing triangular conversions (intra-exchange) over any cross-account transfers whenever possible to eliminate 		transfer fees entirely.
-7. [TRANSFER MANAGER]
-	* Transfers money across accounts after calculating the speed of transfer and transfer fees across accounts
+	* It tries to keep drift <10% across exchanges by INTRA-EXCHANGE triangular conversions.
+	* Does not interrupt [Q-Bot]
+	* One job: Reduces the amount needed to transfer by prioritizing triangular conversions (intra-exchange) over any cross-account transfers whenever possible to eliminate transfer fees entirely.
+7. [TRANSFER MANAGER] 
+	* Transfers USDT OR USDC across accounts after calculating the speed of transfer and transfer fees across accounts
 	* Receives transfer route from [CONVERSION MANAGER].
-	* Does not interrupt arbitrage system
-	* Always queries real-time network fees & times, at execution time and select the cheapest + fastest shared network between sender/receiver eg:
-	* For Kraken → Binance (USDT): Prefer Tron (TRC-20) or Solana → ~$0.50-1 fee, <5 min.
-	* For Binance → Coinbase (USDC): Prefer Solana, Polygon, or Base → <$0.10 fee, <5 min
+	* Does not interrupt [Q-Bot]
+	* Always queries real-time network fees & times, at execution time and select the cheapest + fastest shared network between sender/receiver
+	* Kraken <-> Binance.US can use USDT/USDC
+    * Coinbase <-> Binance.US/KRAKEN use USDC ONLY!
+    * ADDRESSES & networks:
+      ##### BINANCE.US - Deposit USDT:
+		- Network_SOL: 6nVkZ9DhUGpCSikwmwykjZkPCJkQEASVKKnrEScj3Ya8
+		- Network_AVAX C-Chain: 0x9433ef65333256178a317bdefb8c18ad49b22350 
+		- Network_TRON (TRC20): THiAU5ReTWR9TBWVTv1WRKBY7j9qeZXFkw
+      ##### BINANCE.US - Deposit USDC:
+		- Network_SOL: 6nVkZ9DhUGpCSikwmwykjZkPCJkQEASVKKnrEScj3Ya8
+		- Network_AVAX C-Chain: 0x9433ef65333256178a317bdefb8c18ad49b22350
+      ##### KRAKEN - Deposit USDT: 
+		- Network_SOL: FnFSRzQDSa1kfFKABS6onFid1yncwYC6TqKcCXe2bcQa
+		- Network_AVAX C-Chain: 0x18791c1Ec171169B4E599A01D280a325500f1BB5
+		- Network_TRON (TRC20): TLEvYy9aYUztMYqxvXcLshEdvqWwNFysMK
+      ##### KRAKEN - Deposit USDC: 
+		- Network_SOL: FnFSRzQDSa1kfFKABS6onFid1yncwYC6TqKcCXe2bcQa
+		- Network_AVAX C-Chain: 0x18791c1Ec171169B4E599A01D280a325500f1BB5
+		- Network_Sui: 0x29d57083b1b274d6e78155c147f87a9964b8a9e0e28b890ec10a984447e35eab
+		- Network_Algo: SMN5HNKR45Z6GB546A5KRI2AGODAYKSPMXLGL5PB5SFY6URD4MANLLAPKI
+      ##### Coinbase Deposit USDC ONLY!:
+		- Network_SOL: rfXgbu6jQVgEThszwPBvCgHPq2LX59m4qZSLbneqczw
+		- Network_AVAX C-Chain: 0x27FA5C63e7f7c2D07b349A8F44cc29870A32f8C6
+		- Network_Sui: 0xc8cb27799a08da6f64e77f1267d3330fb5e01b13d6cbad1914e81ce069dc4ed6
+		- Network_Algo: XFDI7INMVW32QUKO4QRBHNOIGSNA5AOX2MVWP5DHH3PUXX4JOCPWBF46AU
 	* Adds safety check: Minimum transfer size $500+ (to avoid dust/minimums; simulate net cost (fee + slippage) before transferring).
 	* One job: Keep average transfer cost per rebalance <$1 (achievable on above networks), ensuring operational costs stay <0.5% of capital annually.
-8. [[Q-Bot]]
-	* SIMPLE Cross Exchange Arbitrage (80% of Qbot capital) (10s cycles)
-	* TRIANGULAR Arbitrage (20% of Qbot Capital) (30s cycles)
+8. [Q-Bot]
+	* SIMPLE Cross Exchange Arbitrage (80% of [Q-Bot] capital) (10s cycles)
+	* TRIANGULAR Arbitrage (20% of [Q-Bot] Capital) (30s cycles)
 	* BOTH:
-	    * Run in tight continuous loop (every 10-30s, independent paralled threads).
+	    * Run in tight continuous loops (independent parallel threads).
 	    * Subscribes to fast WS data.
 	    * Both take advantage of USDT and USDC prices
 	    * Uses auction_context & order_executor logic
@@ -60,34 +80,140 @@ System Components
 	    * Calculates net profit (fees/slippage/transfers).
 	    * Executes trades if profitable (limit/market mix, volume profiles, latency).
 	    * Always active; uses its allocated capital share.
-	    * One job: full arb cycle (scan + execute).
-9. [MARKET SCANNER]
-	* Compares price and order books to daily candle OHLC
-	* Uses market_context logic (CVD, Wykoff, Wale Activity, VolProf)
-	* Tells (Qbot when to be aggressive and when to be careful)
-	* One job: watch for danger or opportunity in price swings.
-10. [[A-Bot]]
+	    * One job: full arb cycle = x3(simple) + x1(triangular).
+10. [A-Bot]
 	* Waits idle until [SIGNAL RECEIVER] gives a buy or sell signal.
-	* On buy: uses its fuel share to buy the coin on the best exchange and stake it.
+	* On buy: uses its allocated share to buy the coin on the best exchange and stake it.
 	* On sell: sells the coin on the best exchange.
 	* If >3 slot is empty, automatically buy the highest-yield stakable coin, (seat warmer).
 	* If <2 slot is empty automatically sell the “seat warmer” FIFO..
 	* One job: handle the 6 long positions and staking when told.
-11. [[G-Bot]]
-	* Activates only in GOLD mode (told by Mode Manager).
-	* Uses its fuel share to buy PAXG on the best exchange/pair.
-	* IF {{MANUAL SWEEP}} is PRESSED during BTC MODE (max frequency, x1 a month), moves 15% 	of total profits to cold wallet in PAXG.
+11. [G-Bot]
+	* Activates only in GOLD mode.
+	* Uses its allocated share to buy PAXG on the best exchange/pair.
+	* IF [MANUAL SWEEP] is PRESSED during BTC MODE (max frequency, x1 a month), moves 15% of total profits to BASE wallet in PAXG.
 	* On mode flip to BTC, sells 85% of PAXG to free up fuel
-	* keeps remaining 15% on a cold wallet
-	* every cycle keeps 15%
+	* Keeps remaining 15% on BASE wallet
+	* Every cycle keeps 15%
 	* One job: manage gold accumulation and sweeps.
+9. [MARKET SCANNER]
+	* Compares price and order books to daily candle OHLC
+	* Uses market_context logic (CVD, Wykoff, Wale Activity, VolProf)
+	* Tells [Q-Bot] when to be aggressive and when to be careful
+	* One job: watch for danger or opportunity in price swings.
+12. [FEE MANAGER]
+     * Fetches lowest combined buy/sell fees
+     * Maintains a min dynamic BNB balance.
+     * Tracks 'zero fee' allowances per month for each account
+     * One job: monitor and manage fees
 
 ### Current Refactor Goal (Hexagonal Architecture)
 ***TASK***
-- CHECK if pure functions are still scattered or reiterated multiple times across multiple files.
-- any function usually needs to SCAN/FETCH - CALCULATE - ANALYZE - EXECUTE
+The refactor is currently incomplete, unorganized, but functional. However as you can see from the most recent logs, account drift is disabling function. This is unnacceptable, I made a bottleneck mode specifically to keep [Q-Bot] running despite drift being more than 15%!
+
+Review the links attached, they have all the answers. I want to modify the three prompts below to address all the changes i want to make.
+
+***review*** these links thoroughly because they tell you exactly how to handle each account/exchange
+
+https://github.com/coinbase/coinbase-advanced-py/
+https://docs.kraken.com/api/docs/guides/global-intro
+https://docs.binance.us/#introduction
+
+updates i would like to add:
+
+Prompt 1: Add MarketData (Foundation – run this first)
+
+You are a senior Python developer for crypto bots. Additions only: no modifications or removals to existing code. Preserve all fallbacks and safety.
+
+Context:
+- bot/Q.py: Main loop, WS order books cached (from adapters/data/ws.py), scan_triangular() calls manager/conversion.py detect_triangle().
+- All symbols.
+- Order books: dict[exchange][pair] = {'bids': list[[price, qty]], 'asks': list[[price, qty]]}.
+- Use existing utils/logger.py for logging.
+
+Task: Add thread-safe MarketData for rolling features from WS updates.
+1. Create new file: manager/market_data.py
+   - Class MarketData:
+     - __init__: self.windows = defaultdict(lambda: deque(maxlen=60))  # 60 min if 1-min updates
+     - update(symbol, book, mid_price=None): append mid_price = (best_bid + best_ask)/2, lock with threading.Lock
+     - get_volatility(symbol): return std dev of deque prices if len>=10 else 0.0 (use statistics.stdev or numpy if imported)
+     - get_book_imbalance(symbol, depth_pct=0.05): cum_bid_qty, cum_ask_qty at depth_pct from mid; return (cum_bid - cum_ask)/(cum_bid + cum_ask) if total>0 else 0
+     - get_depth_ratio(symbol, depth_pct=0.05): cum_bid_qty / cum_ask_qty at depth_pct
+     - get_market_means(): dict with 'imbalance_mean', 'depth_ratio_mean' averaged over all symbols with data
+     - get_price_momentum(symbol): (current - deque[0])/deque[0] if len>=2 else 0
+   - Thread-safe: use lock for updates/queries.
+2. In bot/Q.py: Instantiate aggregator = MarketData() in QBot class.
+   - Hook WS callback (adapters/data/ws.py or Q.py loop): after book update, aggregator.update(symbol, book, mid_price=...)
+3. Add config: MARKET_DATA_ENABLED: true (default true) to config/settings.json or .env
+4. Log aggregator updates/errors.
+
+Output: Diffs only for manager/market_data.py (new), bot/Q.py, config files.
+Include one test: mock 2 symbols with prices/books, verify get_volatility and get_market_means.
+Implement precisely.
+
+
+Prompt 2: Add GNN Arbitrage Detection (Update 1 – after aggregator is in)
+You are a senior Python developer for crypto bots. Additions only, no changes to existing logic.
+
+Context:
+- manager/market_data.py now provides get_volatility(), get_depth_ratio() etc.
+- bot/Q.py: order books refreshed in main loop.
+- manager/conversion.py: detect_triangle() uses itertools.permutations (legacy).
+- core/profit.py for profit calc.
+
+Task: Add optional GraphSAGE cycle detection.
+1. Add to requirements.txt: torch torch-geometric networkx
+2. New functions in manager/conversion.py (or new file if preferred):
+   - build_market_graph(books, aggregator): nx.DiGraph()
+     - Nodes: assets from monitored symbols
+     - Edges: for each ex-pair in books: from base to quote, weight=-math.log(ask_price), features={'volume': sum top bids+asks qty, 'volatility': aggregator.get_volatility(base) or 0, 'fee': ex fee from config/wrappers, 'exchange': one-hot (use dict or np.array)}
+   - gnn_spot_cycles(graph): 2-layer GraphSAGE (mean aggregator, ReLU), PyG Data from graph, inference → node embeddings. Use NetworkX simple_cycles on subgraph (high embedding similarity nodes). Score paths by potential profit or embedding dot. Return list of scored cycles.
+3. In bot/Q.py main loop (after books refresh): if config.USE_GNN:
+   - graph = build_market_graph(books, self.aggregator)
+   - cycles = gnn_spot_cycles(graph)
+   - For each cycle: calc profit via core/profit.py → feed to manager/scanner.py score_opportunity()
+4. Fallback: if not USE_GNN or error: run legacy detect_triangle()
+5. Add config.USE_GNN: false to config/settings.json
+6. Log graph build, inference time, cycles found.
+
+Output: Diffs for requirements.txt, manager/conversion.py, bot/Q.py, config files.
+One test: mock small graph (3 assets, 3 edges), expect cycle list.
+Implement step-by-step.
+
+
+Prompt 3: Add Coin Quadrant Alpha Sniper (Update 2 – last)
+You are a senior Python developer for crypto bots. Additions only.
+
+Context:
+- manager/market_data.py: get_depth_ratio(), get_book_imbalance(), get_market_means(), get_price_momentum()
+- manager/scanner.py: ArbitrageAnalyzer.score_opportunity()
+- bot/Q.py: main loop, capital management.
+- core/order_executor.py for execution.
+
+Task: Add Quadrant Alpha Sniper (15% allocation, premium).
+1. New class in manager/scanner.py: AlphaQuadrantAnalyzer
+   - __init__: self.aggregator, self.threshold = config.ALPHA_THRESHOLD or 1.5
+   - scan(): every 5-15 min (use threading.Timer or time check in Q.py)
+     - For each symbol in monitored:
+       - x = aggregator.get_depth_ratio(symbol, 0.05)  # bid/ask qty ratio at 5%
+       - y = aggregator.get_book_imbalance(symbol, 0.05)  # proxy for whale delta
+       - means = aggregator.get_market_means()
+       - bonus = abs(aggregator.get_price_momentum(symbol))  # or 0
+       - score = (x > means['depth_ratio_mean'] and y > means['imbalance_mean']) * (y * x * (1 + bonus))
+     - If score > threshold: threading.Thread(target=self.execute_alpha_snipe, args=(symbol, score))
+   - execute_alpha_snipe(symbol, score): amount = 0.15 * available_capital; check paper_mode; call core/order_executor buy/stake with hold rules; log
+2. In bot/Q.py: If config.QUADRANT_ALPHA: start analyzer.scan() timer in __init__ or loop.
+3. Extend scanner.score_opportunity(): add quadrant_score if QUADRANT_ALPHA true.
+4. Config additions: QUADRANT_ALPHA: false, ALPHA_THRESHOLD: 1.5
+5. Safety: separate capital check, log only, paper_mode blocks trades.
+
+Output: Diffs for manager/scanner.py, bot/Q.py, config files.
+One test: mock 3 symbols with books/prices (one top-right), verify score and trigger.
+Implement precisely.
+These are ~400-500 tokens each (JetBrains free tier handles fine; paid is safe). Paste sequentially, confirm diffs add only, commit to new branch (_premium_FIXED). If AI wanders, reply “Additions only, fix to match prompt exactly.” This should give you clean, accurate premium upgrades. Let me know the results after the first one!
+
 
 **Rules**:
-- Never change the strategy, settings, or existing nomenclature.
+- Never change the strategy, settings, or existing nomenclature without approval and confirmation.
 - Use Decimal everywhere for money calculations.
 

@@ -67,8 +67,6 @@ class BinanceUSWebSocket:
             except Exception as e:
                 self.logger.error(f"Callback error: {e}")
 
-# Similar for KrakenWebSocket (preserve as-is, aligns with SDK)
-
 class KrakenWebSocket:
     def __init__(self, pair: str = "XBT/USD"):
         self.uri = "wss://ws.kraken.com"
@@ -173,7 +171,6 @@ class CoinbaseWebSocket:
             except Exception as e:
                 self.logger.error(f"Callback error: {e}")
 
-# Add Coinbase Advanced WebSocket
 class CoinbaseAdvancedWebSocket:
     def __init__(self, product_ids: str = "BTC-USD"):
         self.uri = "wss://advanced-trade-ws.coinbase.com" 

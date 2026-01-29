@@ -23,6 +23,7 @@ class FeeManager:
         self._fetch_fee_structures()
 
     def _fetch_fee_structures(self):
+        """Fetches and standardizes exchange fees with retry logic"""
         for name, exchange in self.exchanges.items():
             for attempt in range(self.retry_count):
                 try:
@@ -49,6 +50,7 @@ class FeeManager:
         best_sell = None
         lowest_fee_pair = Decimal('999')
         for buy_ex in available:
+            # Determines exchanges with lowest combined buy/sell fees
             for sell_ex in available:
                 if buy_ex == sell_ex:
                     continue
