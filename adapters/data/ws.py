@@ -38,6 +38,10 @@ class BinanceUSWebSocket:
         self.symbol_map = {s: s.upper().replace('USDT', '/USDT').replace('USD', '/USD').replace('USDC', '/USDC') 
                           for s in self.symbols}
 
+    @property
+    def connected(self) -> bool:
+        return self.ws is not None and self.ws.open
+
     async def connect(self):
         try:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -115,6 +119,10 @@ class KrakenWebSocket:
         # Map Kraken to standard: XBT/USD -> BTC/USD
         self.symbol_map = {'XBT': 'BTC', 'XDG': 'DOGE'}
 
+    @property
+    def connected(self) -> bool:
+        return self.ws is not None and self.ws.open
+
     def _normalize_symbol(self, kraken_symbol: str) -> str:
         """Convert Kraken symbol to standard: XBT/USD -> BTC/USD"""
         for k, v in self.symbol_map.items():
@@ -190,6 +198,10 @@ class CoinbaseWebSocket:
         self.logger = logging.getLogger(__name__)
         self.callbacks = []
         self.order_books = {}  # Cache order books for incremental updates
+
+    @property
+    def connected(self) -> bool:
+        return self.ws is not None and self.ws.open
 
     async def connect(self):
         try:
@@ -282,6 +294,10 @@ class CoinbaseAdvancedWebSocket:
         self.logger = logging.getLogger(__name__)
         self.callbacks = []
         self.order_books = {}
+
+    @property
+    def connected(self) -> bool:
+        return self.ws is not None and self.ws.open
 
     async def connect(self):
         try:

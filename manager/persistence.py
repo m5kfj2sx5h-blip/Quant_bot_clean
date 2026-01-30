@@ -14,10 +14,12 @@ class PersistenceManager:
         self._init_db()
 
     def _get_connection(self):
-        return sqlite3.connect(self.db_path)
+        return sqlite3.connect(self.db_path, timeout=30.0)
 
     def _init_db(self):
         with self._get_connection() as conn:
+            # Enable WAL mode for concurrency (Reader doesn't block Writer)
+            conn.execute("PRAGMA journal_mode=WAL;")
             cursor = conn.cursor()
             
             # 1. Trades Table (Historical records)

@@ -923,8 +923,8 @@ def main():
     
     for idx, exchange_name in enumerate(['KRAKEN', 'BINANCEUS', 'COINBASE']):
         with exchange_cards[idx]:
-            exchange_price = next((p for p in price_data if p['exchange'] == exchange_name), None)
-            exchange_balance = next((b for b in balance_data if b['Exchange'] == exchange_name), None)
+            exchange_price = next((p for p in price_data if p['exchange'].upper() == exchange_name), None)
+            exchange_balance = next((b for b in balance_data if b['Exchange'].upper() == exchange_name), None)
             
             fee_info = {'effective_fee_rate': 0.001, 'discount_active': True}
             
