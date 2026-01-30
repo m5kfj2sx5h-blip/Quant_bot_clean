@@ -6,5 +6,9 @@
     "kraken": "https://api.kraken.com",
     "coinbase": "https://api.coinbase.com",
     "coinbase_advanced": "https://api.coinbase.com"
-  }
+  },
+  "MARKET_DATA_ENABLED": true,
+  "USE_GNN": true,
+  "QUADRANT_ALPHA": true,
+  "ALPHA_THRESHOLD": 1.5
 }

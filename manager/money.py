@@ -102,15 +102,46 @@ class MoneyManager:
                 drift_data.append((asset, deviation))
         
         if drift_data:
-            logger.info(f"Drift >=15% detected for {len(drift_data)} assets. Attempting Zero-Transfer correction...")
-            # 1. Try Conversion Manager (Intra-exchange triangular)
-            if self.conversion_manager.control_drift(drift_data):
-                logger.info("Drift partially/fully controlled via intra-exchange triangular — saved on transfer fees")
+            logger.info(f"Drift detected for {len(drift_data)} assets. Analyzing Smart Correction Cost...")
             
-            # 2. Try Transfer Manager (Cross-exchange)
-            logger.info("Running Transfer Manager to balance accounts...")
-            self.transfer_manager.balance_accounts()
+            # Smart Drift Logic: Compare Transfer Cost vs Conversion Loss
+            # 1. Estimate Transfer Cost (Default Estimates based on research)
+            # Solana/AVAX: ~$0.10, TRON: ~$1.00, ERC20: ~$5.00
+            transfer_cost_est = Decimal('5.00') # Conservative default
+            # TODO: Future optimization - query TransferManager for exact network fee
             
+            # 2. Estimate Conversion Loss (Spread + Fee ~ 0.2%)
+            # We take the max drift amount to estimate the impact
+            max_drift_amount = max([d[1] for d in drift_data]) * total_portfolio_value
+            conversion_loss_est = max_drift_amount * Decimal('0.002')
+            
+            logger.info(f"Smart Correction Analysis: Transfer Cost (~${transfer_cost_est}) vs Internal Conversion Loss (~${conversion_loss_est:.2f})")
+            
+            use_transfer = False
+            # Decision Matrix
+            if conversion_loss_est < transfer_cost_est:
+                if any(d[1] >= Decimal('0.35') for d in drift_data):
+                    logger.warning("Drift is critical (>35%) - Forcing Transfer despite higher cost")
+                    use_transfer = True
+                else:
+                    logger.info(f"Internal Conversion is cheaper (Save ${transfer_cost_est - conversion_loss_est:.2f}) - Attempting local fix")
+                    if self.conversion_manager.control_drift(drift_data):
+                        return {}
+                    logger.warning("Internal conversion failed/skipped, falling back to check transfer")
+                    use_transfer = True
+            else:
+                logger.info(f"Transfer is cheaper (Save ${conversion_loss_est - transfer_cost_est:.2f}) - Attempting Transfer")
+                use_transfer = True
+
+            if use_transfer:
+                try:
+                    logger.info("Running Transfer Manager to balance accounts...")
+                    self.transfer_manager.balance_accounts()
+                except Exception as e:
+                    logger.error(f"Transfer Manager failed: {e}. FALLING BACK TO INTERNAL CONVERSION.")
+                    # Resilience: Fallback to conversion if transfer fails
+                    self.conversion_manager.control_drift(drift_data)
+        
         return {}
 
     def _fetch_balances(self) -> Dict:

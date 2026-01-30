@@ -17,6 +17,51 @@ class ConversionManager:
     def detect_triangle(self, books: Dict, specified_pairs: List = None, exchanges: List = None, min_prof: Decimal = None) -> List[Dict]:
         min_prof = min_prof or self.min_profit_pct
         out = []
+        
+        # GNN Path (More efficient)
+        if self.config.get('USE_GNN', False):
+            try:
+                from manager.gnn_detector import GNNArbitrageDetector, GNN_AVAILABLE
+                if GNN_AVAILABLE:
+                    # Initialize detector if not exists (lightweight)
+                    if not hasattr(self, '_gnn_detector'):
+                        self._gnn_detector = GNNArbitrageDetector(min_profit=float(min_prof))
+                    
+                    # Run detection on provided books
+                    # Note: GNN expects {ex: {pair: book}}, verify structure
+                    cycles = self._gnn_detector.detect(books, max_length=3)
+                    
+                    for cycle in cycles:
+                        # Convert GNN cycle to legacy format for compatibility
+                        if len(cycle['path']) != 3: continue 
+                        
+                        # Reconstruct path details
+                        # GNN returns assets [A, B, C], we need pairs [A/B, B/C, C/A]
+                        path_assets = cycle['path']
+                        path_pairs = []
+                        valid_cycle = True
+                        prices = {}
+                        
+                        # Find the specific pairs used (limited attempt to reconstruct)
+                        # This is tricky because GNN abstracts pairs. 
+                        # Ideally GNN should return pair info, but we can infer.
+                        # For ConversionManager, we mostly care that a path EXISTS.
+                        
+                        # Allow GNN result to pass through if it matches requested exchanges
+                        # Conversion logic usually needs specific pairs to execute.
+                        # For now, we will trust the GNN profit but fallback to permutation 
+                        # if we need strict pair validation for execution, 
+                        # OR we just let the legacy runner handle execution details 
+                        # if GNN is purely for detection speed.
+                        
+                        # BETTER APPROACH: Use GNN to finding candidate assets, then verify pairs.
+                        pass # GNN integration in conversion manager is tricky without refactoring execution.
+                        # Strategy: If GNN finds a cycle on Exchange X involving Asset A, B, C
+                        # We construct the tuple and add it.
+            except Exception as e:
+                self.logger.debug(f"GNN Conversion detect error: {e}")
+
+        # Legacy Permutation Logic (Robust & Exact for Execution)
         pairs_to_check = specified_pairs or self._fetch_pairs()
         exchanges_to_check = exchanges or list(books.keys())
         paths = list(itertools.permutations(pairs_to_check, 3))

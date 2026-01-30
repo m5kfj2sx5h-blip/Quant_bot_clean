@@ -296,8 +296,31 @@ class SystemCoordinator:
 
                 # 2. Q-Bot Arbitrage Scans (Always active)
                 if 'qbot' in self.bots:
-                    # Fetch live balances for sizing
-                    balances = {name: self.exchanges[name].get_balance('USDT') for name in self.exchanges}
+                    # Fetch live balances for sizing (Asset Agnostic + Locked Asset Protection)
+                    # 1. Fetch Raw Balances
+                    raw_balances = {}
+                    for name, exchange in self.exchanges.items():
+                        try:
+                            raw_balances[name] = exchange.get_balance()
+                        except Exception:
+                            raw_balances[name] = {}
+
+                    # 2. Get Locked Assets
+                    locked_a = self.bots['abot'].get_locked_assets() if 'abot' in self.bots else {}
+                    locked_g = self.bots['gbot'].get_locked_assets() if 'gbot' in self.bots else {}
+
+                    # 3. Calculate FREE Capital
+                    balances = {}
+                    for ex_name, assets in raw_balances.items():
+                        balances[ex_name] = {}
+                        for coin, amount in assets.items():
+                            locked_amount = locked_a.get(coin, Decimal('0'))
+                            if coin == 'PAXG': # G-Bot specific
+                                locked_amount += locked_g.get('PAXG', Decimal('0'))
+                                
+                            free_amount = amount - locked_amount
+                            if free_amount > 0:
+                                balances[ex_name][coin] = free_amount
 
                     # Cross-exchange scan
                     cross_opps = await self.bots['qbot'].scan_cross_exchange(balances)
@@ -312,6 +335,10 @@ class SystemCoordinator:
                             # Execute best triangular opportunity for this exchange
                             best_tri = max(tri_opps, key=lambda x: x['net_profit_pct'])
                             await self.bots['qbot'].execute_triangular(best_tri)
+                            
+                    # Alpha Quadrant Scan (Step 4 Premium)
+                    # Scan for high-quality snipe targets using market depth/imbalance
+                    await self.bots['qbot'].scan_alpha_quadrant(balances)
 
                 # 3. A-Bot Periodic Checks (BTC Mode)
                 if 'abot' in self.bots:

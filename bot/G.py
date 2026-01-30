@@ -212,3 +212,9 @@ class GBot:
             'keep_forever_pct': float(self.keep_forever_pct * 100),
             'cold_wallet_configured': bool(self.cold_wallet)
         }
+
+    def get_locked_assets(self) -> Dict[str, Decimal]:
+        """Returns dictionary of assets locked by G-Bot (PAXG)."""
+        if self.total_paxg_accumulated > 0:
+            return {'PAXG': self.total_paxg_accumulated}
+        return {}

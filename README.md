@@ -1,10 +1,46 @@
-### _FIXED is the only working branch
+## Agent Instructions
+
+This file is mirrored across CLAUDE.md, AGENTS.md, and GEMINI.md so the same instructions load in any AI environment.
+
+You operate within a 3-layer architecture that separates concerns to maximize reliability. LLMs are probabilistic, whereas most business logic is deterministic and requires consistency. This system fixes that mismatch.
+
+### The 3-Layer Architecture
+
+**Layer 1: Directive (What to do)**  
+- Markdown SOPs in `directives/` (or embedded here).  
+- Define goals, inputs, tools/scripts to use, outputs, edge cases.  
+- Natural language instructions, like you'd give a mid-level employee.
+
+**Layer 2: Orchestration (Decision making)**  
+- This is you (the AI). Your job: intelligent routing.  
+- Read directives, call execution tools/scripts in the right order, handle errors, ask for clarification, update directives with learnings.  
+- You're the glue between intent and execution. E.g., don't try scraping websites yourself—read `directives/scrape_website.md` and run `execution/scrape_single_site.py`.  
+- Focus on decision-making; push complexity to deterministic code.
+
+**Layer 3: Execution (Doing the work)**  
+- Deterministic Python scripts in `execution/` (or equivalent).  
+- Environment variables, API tokens, etc. stored in `.env`.  
+- Handle API calls, data processing, file operations, database interactions.  
+- Reliable, testable, fast. Use scripts instead of manual work. Commented well.
+
+**Why this works:** If you do everything yourself, errors compound. 90% accuracy per step = 59% success over 5 steps. The solution is push complexity into deterministic code. That way you just focus on decision-making.
+
+### Operating Principles
+
+1. **Check for tools first**  
+   Before writing a script, check existing ones in `execution/` per your directive. Only create new scripts if none exist.
+
+2. **Self-anneal when things break**  
+   - Read error message and stack trace.  
+   - Fix the script and test it again (unless it uses paid tokens/credits/etc.—in which case check with user first).
+
+Now apply this architecture to the project below.
 
 ## Project Goal & Hexagonal Refactor Instructions
+
 This is a cryptocurrency arbitrage and hedging bot designed for a ~$10,000 budget in January 2026.
 
 ### Core Strategy (100% to be preserved)
-Crypto Arbitrage Strategy: Exploiting Market Inefficiencies for Consistent Returns
 
 The system operates in two primary modes based on a custom TradingView signal:
 
@@ -122,9 +158,13 @@ System Components
      * Tracks 'zero fee' allowances per month for each account
      * One job: monitor and manage fees
 
-### Current Refactor Goal (Hexagonal Architecture)
-***TASK***
+All other files are critical for proper strategy function. 
 
+### Current Refactor Goal (Hexagonal Architecture)
+
+Refactor to clean hexagonal/ports & adapters without changing strategy. Core/domain pure, adapters for exchanges, managers for orchestration.
+
+Prioritized fixes: fix drift disabling Q-Bot (unacceptable—use bottleneck mode if needed).
 #### STEP1 "ACCEPT IMBALANCE - PROFIT OVER PERFECTION!"
 the bot does not trade because drift is set at 15%. Increase to 35%. 
 At no point in time should [Q-Bot] be interrupted! 
@@ -137,16 +177,16 @@ The refactor is currently incomplete, unorganized, but functional. However as yo
 
 Review the links attached, they have all the answers. I want to modify the three prompts below to address all the changes i want to make.
 
-***review*** these links thoroughly because they tell you exactly how to handle each account/exchange
+Review official docs:  
+- https://github.com/coinbase/coinbase-advanced-py/  
+- https://docs.kraken.com/api/docs/guides/global-intro  
+- https://docs.binance.us/#introduction  
 
-https://github.com/coinbase/coinbase-advanced-py/
-https://docs.kraken.com/api/docs/guides/global-intro
-https://docs.binance.us/#introduction
+### Prioritized Implementation Tasks
 
 ##### STEP2 "VRAM IS GREAT - BUT WE STILL NEED TO AGGREGATE QUARTERLY MARKET DATA FOR BETTER CALCULATIONS"
-***updates to do*** updates i would like to add:
-
-Prompt 1: Add MarketData (Foundation – run this first)
+***updates to do*** 
+**Prompt 1: Add MarketData (Foundation – run this first)**  
 
 You are a senior Python developer for crypto bots. Additions only: no modifications or removals to existing code. Preserve all fallbacks and safety.
 
@@ -172,13 +212,13 @@ Task: Add thread-safe MarketData for rolling features from WS updates.
 3. Add config: MARKET_DATA_ENABLED: true (default true) to config/settings.json or .env
 4. Log aggregator updates/errors.
 
-Output: Diffs only for manager/market_data.py (new), bot/Q.py, config files.
-Include one test: mock 2 symbols with prices/books, verify get_volatility and get_market_means.
+Output: Diffs only for manager/market_data.py (new), bot/Q.py, config files and any other files that need to be updated.
 Implement precisely.
+
 
 ##### STEP 3 "PREMUIM [Q-Bot] & conversion.py EDITION - NEEDS TO BE APPLIED TO BOTH TRIANGULAR ARBITRAGES - Efficient Triangular Arbitrage Detection via Graph Neural Networks"
 SEARCH ONLINE TO LEARN HOW TO BEST APPLY THIS TO OUR STRATEGY:
-Prompt 2: Add GNN Arbitrage Detection (Update 1 – after aggregator is in)
+**Prompt 2: Add GNN Arbitrage Detection (Update 1 – after aggregator is in)**  
 You are a senior Python developer for crypto bots. Additions only, no changes to existing logic.
 
 Context:
@@ -202,13 +242,12 @@ Task: Add optional GraphSAGE cycle detection.
 5. Add config.USE_GNN: false to config/settings.json
 6. Log graph build, inference time, cycles found.
 
-Output: Diffs for requirements.txt, manager/conversion.py, bot/Q.py, config files.
-One test: mock small graph (3 assets, 3 edges), expect cycle list.
+Output: Diffs for requirements.txt, manager/conversion.py, bot/Q.py, config files and any other files that need to be updated.
 Implement step-by-step.
 
 ##### STEP 4 "PREMUIM [A-Bot] EDITION - QUADRANT ALPHA SNIPER"
 SEARCH ONLINE TO LEARN HOW TO BEST APPLY THIS TO OUR STRATEGY:
-Prompt 3: Add Coin Quadrant Alpha Sniper (Update 2 – last)
+**Prompt 3: Add Coin Quadrant Alpha Sniper (Update 2 – last)**
 You are a senior Python developer for crypto bots. Additions only.
 
 Context:

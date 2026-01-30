@@ -1,0 +1,10 @@
+MONTE CARLO SIMULATION REPORT
+=============================
+Date: 2026-01-30 02:11:06.345859
+Scenario: Macro Regime Switch (Neutral -> Bull)
+Initial Equity: $10000.00
+Final Equity:   $10872.31
+Net Return:     8.72%
+Max Drawdown:   -1.20%
+Sharpe Ratio:   8.16
+Total Trades:   192

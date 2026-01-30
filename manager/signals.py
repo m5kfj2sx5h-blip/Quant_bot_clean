@@ -16,17 +16,40 @@ class MacroHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
+        
+        # Authentication Logic
         secret = os.getenv('WEBHOOK_PASSPHRASE', '')
+        authorized = False
+        
+        # 1. HMAC Check (Standard TradingView)
+        username_check = True # Assume valid unless proven otherwise
         if secret:
-            expected_sig = hmac.new(secret.encode(), post_data, hashlib.sha256).hexdigest()
+            username_check = False # Must prove identity
             received_sig = self.headers.get('X-TV-Signature', '')
-            if received_sig and received_sig != expected_sig:
-                logger.warning("Invalid webhook signature received")
+            if received_sig:
+                expected_sig = hmac.new(secret.encode(), post_data, hashlib.sha256).hexdigest()
+                if received_sig == expected_sig:
+                    authorized = True
+
+        try:
+            data = json.loads(post_data.decode('utf-8'))
+            
+            # 2. JSON Secret Check (Fallback for PineScript)
+            if not authorized and secret:
+                payload_secret = data.get('secret')
+                if payload_secret == secret:
+                    authorized = True
+            
+            # If no secret env var is set, allow all (Test Mode)
+            if not secret:
+                authorized = True
+                
+            if not authorized:
+                logger.warning("Unauthorized webhook request")
                 self.send_response(401)
                 self.end_headers()
                 return
-        try:
-            data = json.loads(post_data.decode('utf-8'))
+
             logger.info(f"Received signal: {data}")
             if hasattr(self.server, 'signal_callback') and callable(self.server.signal_callback):
                 self.server.signal_callback(data)

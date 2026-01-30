@@ -42,12 +42,8 @@ class BinanceUSAdapter:
                 }
         return balances
 
-    def get_order_book(self, symbol: Symbol, limit: int = 5) -> Dict[str, List[Dict[str, Decimal]]]:
-        book = self.client.depth(str(symbol).replace('/', ''), limit=limit)
-        return {
-            'bids': [{'price': Decimal(p[0]), 'amount': Decimal(p[1])} for p in book['bids']],
-            'asks': [{'price': Decimal(p[0]), 'amount': Decimal(p[1])} for p in book['asks']]
-        }
+    def get_order_book(self, symbol: Symbol, limit: int = 5) -> Dict:
+        return self.client.depth(str(symbol).replace('/', ''), limit=limit)
 
     def get_ticker_price(self, symbol: Symbol) -> Price:
         ticker = self.client.ticker_price(str(symbol).replace('/', ''))

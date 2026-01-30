@@ -289,3 +289,10 @@ class ABot:
             'trades_executed': self.trades_executed,
             'allowed_coins': self.allowed_coins
         }
+
+    def get_locked_assets(self) -> Dict[str, Decimal]:
+        """Returns dictionary of assets currently held by A-Bot (warmers + trades)."""
+        locked = {}
+        for coin, position in self.positions.items():
+            locked[coin] = locked.get(coin, Decimal('0')) + position['amount']
+        return locked

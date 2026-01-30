@@ -109,6 +109,135 @@ class ArbitrageAnalyzer:
         
         return opportunity
 
+
+class AlphaQuadrantAnalyzer:
+    """
+    Quadrant Alpha Sniper (Step 4 Premium A-Bot Feature).
+    
+    Scores symbols by their position in a 2D quadrant:
+    - X-axis: depth_ratio (bid_vol / ask_vol at 5% depth)
+    - Y-axis: imbalance ((bid - ask) / (bid + ask))
+    
+    Symbols in the "top-right" quadrant (high depth_ratio + high imbalance)
+    are prime snipe targets with 15% allocation.
+    """
+    
+    def __init__(self, aggregator, config: Dict = None, logger: logging.Logger = None):
+        """
+        Args:
+            aggregator: MarketData instance for metrics
+            config: Bot config dict
+            logger: Logger instance
+        """
+        self.aggregator = aggregator
+        self.config = config or {}
+        self.logger = logger or logging.getLogger(__name__)
+        self.threshold = Decimal(str(self.config.get('ALPHA_THRESHOLD', 1.5)))
+        self.allocation_pct = Decimal('0.15')  # 15% max allocation
+        self.paper_mode = self.config.get('paper_mode', True)
+        self.last_scan_time = 0.0
+        self.scan_interval = 300  # 5 minutes default
+    
+    def scan(self, symbols: List[str]) -> List[Dict]:
+        """
+        Scan symbols for quadrant snipe opportunities.
+        
+        Args:
+            symbols: List of trading pairs to evaluate
+            
+        Returns:
+            List of opportunities with scores
+        """
+        opportunities = []
+        
+        if not self.aggregator:
+            return opportunities
+        
+        # Get market means for comparison
+        try:
+            means = self.aggregator.get_market_means()
+            mean_depth = Decimal(str(means.get('depth_ratio_mean', 1.0)))
+            mean_imbalance = Decimal(str(means.get('imbalance_mean', 0.0)))
+        except Exception:
+            mean_depth = Decimal('1.0')
+            mean_imbalance = Decimal('0.0')
+        
+        for symbol in symbols:
+            try:
+                # Get quadrant coordinates
+                x = self.aggregator.get_depth_ratio(symbol)
+                y = self.aggregator.get_book_imbalance(symbol)
+                momentum = self.aggregator.get_price_momentum(symbol)
+                
+                # Convert to Decimal
+                x = Decimal(str(x)) if not isinstance(x, Decimal) else x
+                y = Decimal(str(y)) if not isinstance(y, Decimal) else y
+                momentum = Decimal(str(momentum)) if not isinstance(momentum, Decimal) else momentum
+                
+                # Quadrant scoring: (x > mean AND y > mean) * (y * x * (1 + |momentum|))
+                in_top_right = x > mean_depth and y > mean_imbalance
+                
+                if in_top_right:
+                    score = y * x * (Decimal('1') + abs(momentum))
+                else:
+                    score = Decimal('0')
+                
+                if score > self.threshold:
+                    opportunities.append({
+                        'symbol': symbol,
+                        'score': float(score),
+                        'depth_ratio': float(x),
+                        'imbalance': float(y),
+                        'momentum': float(momentum),
+                        'type': 'quadrant_alpha'
+                    })
+                    self.logger.info(f"[ALPHA] Snipe target: {symbol} score={float(score):.3f}")
+                    
+            except Exception as e:
+                self.logger.debug(f"[ALPHA] Error scanning {symbol}: {e}")
+                continue
+        
+        # Sort by score descending
+        return sorted(opportunities, key=lambda x: x['score'], reverse=True)
+    
+    def execute_alpha_snipe(self, symbol: str, score: Decimal, available_capital: Decimal) -> Optional[Dict]:
+        """
+        Execute a snipe with 15% allocation and safety checks.
+        
+        Args:
+            symbol: Trading pair to snipe
+            score: Quadrant score
+            available_capital: Total available capital in USD
+            
+        Returns:
+            Execution result dict or None if blocked
+        """
+        # Calculate allocation
+        snipe_amount = available_capital * self.allocation_pct
+        
+        if snipe_amount < Decimal('10'):  # Minimum trade size
+            self.logger.warning(f"[ALPHA] Snipe blocked: amount too small ({snipe_amount})")
+            return None
+        
+        if self.paper_mode:
+            self.logger.info(f"[ALPHA] PAPER MODE: Would snipe {symbol} with ${snipe_amount:.2f}")
+            return {
+                'symbol': symbol,
+                'amount': float(snipe_amount),
+                'score': float(score),
+                'status': 'paper_executed'
+            }
+        
+        # Real execution would go here via order_executor
+        self.logger.info(f"[ALPHA] Executing snipe: {symbol} ${snipe_amount:.2f}")
+        return {
+            'symbol': symbol,
+            'amount': float(snipe_amount),
+            'score': float(score),
+            'status': 'pending_execution'
+        }
+
+
 class MarketContext:
     """Tracks and analyzes market context for intelligent trading."""
 

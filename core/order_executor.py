@@ -244,6 +244,22 @@ class OrderExecutor:
         for attempt in range(self.settings['max_retries']):
             try:
                 self.logger.debug(f"Attempt {attempt + 1}/{self.settings['max_retries']}: {side.upper()} {amount} {symbol} on {exchange_id}")
+                
+                # --- PAPER MODE CHECK ---
+                is_paper = str(self.config.get('paper_mode', 'false')).lower() == 'true'
+                if is_paper:
+                    self.logger.info(f"📝 PAPER MODE: Simulating {side} {amount} {symbol} @ {price_limit}")
+                    time.sleep(0.1) # Simulate network latency
+                    # Mock successful execution
+                    return {
+                        'success': True, 
+                        'price': price_limit if price_limit else Decimal('1000.0'), # Fallback for market
+                        'amount': amount, 
+                        'fee': Decimal('0'),
+                        'order_id': f'paper_{int(time.time()*1000)}'
+                    }
+                # ------------------------
+
                 order = exchange.place_order(symbol, side, amount, price_limit if order_type == 'limit' else None)
                 execution_price = Decimal(order.get('price', price_limit))
                 

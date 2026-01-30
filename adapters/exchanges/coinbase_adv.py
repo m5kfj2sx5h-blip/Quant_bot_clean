@@ -78,13 +78,9 @@ class CoinbaseAdvancedAdapter:
         except Exception:
             return {}
 
-    def get_order_book(self, symbol: Symbol, limit: int = 5) -> Dict[str, List[Dict[str, Decimal]]]:
+    def get_order_book(self, symbol: Symbol, limit: int = 5) -> Any:
         product_id = str(symbol).replace('/', '-')
-        book = self.client.get_product_book(product_id=product_id, limit=limit)
-        return {
-            'bids': [{'price': Decimal(p.price), 'amount': Decimal(p.size)} for p in book.pricebook.bids],
-            'asks': [{'price': Decimal(p.price), 'amount': Decimal(p.size)} for p in book.pricebook.asks]
-        }
+        return self.client.get_product_book(product_id=product_id, limit=limit)
 
     def get_ticker_price(self, symbol: Symbol) -> Price:
         product_id = str(symbol).replace('/', '-')
