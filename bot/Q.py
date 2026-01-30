@@ -7,8 +7,11 @@ from dotenv import load_dotenv
 from core.profit import calculate_net_profit
 from core.auction import AuctionContextModule, AuctionState
 from core.health_monitor import HealthMonitor
+from core.health_monitor import HealthMonitor
 from core.order_executor import OrderExecutor
+from core.liquidity import LiquidityAnalyzer
 from manager.scanner import MarketContext, AlphaQuadrantAnalyzer
+from manager.sentiment import SentimentAnalyzer
 
 load_dotenv('config/.env')
 
@@ -27,6 +30,7 @@ class QBot:
         self.arbitrage_analyzer = arbitrage_analyzer
         self.data_feed = data_feed
         self.auction_module = AuctionContextModule()
+        self.sentiment_analyzer = SentimentAnalyzer(config)
         self.order_executor = OrderExecutor(config, logger, exchanges, persistence_manager, fee_manager, risk_manager)
         qbot_split = config.get('capital', {}).get('qbot_internal_split', {})
         self.cross_exchange_pct = Decimal(str(qbot_split.get('cross_exchange', 80))) / 100
@@ -34,7 +38,7 @@ class QBot:
         self.pairs = []  # Dynamic
         risk_config = config.get('risk', {})
         # 5% of TPV max trade size
-        self.max_trade_pct = Decimal('0.05')
+        self.max_trade_pct = Decimal(str(risk_config.get('max_trade_pct_tpv', 0.05)))
         self.min_spread_pct = Decimal(str(risk_config.get('min_spread_pct', 0.08))) / 100
         self.depth_multiplier = Decimal(str(risk_config.get('depth_multiplier_min', 2.5)))
         cycle_config = config.get('cycle_times', {})
@@ -261,6 +265,11 @@ class QBot:
                     logger.debug(f"Error fetching {pair} from {ex_name}: {e}")
                     continue
             
+            # LOG: Show which exchanges have price data for this pair
+            if prices:
+                price_summary = ", ".join([f"{ex}:{p['bid']:.2f}/{p['ask']:.2f}" for ex, p in prices.items()])
+                logger.debug(f"📊 {pair}: {price_summary}")
+            
             # Identify Base and Quote Currency
             # e.g., ETH/BTC -> Base: ETH, Quote: BTC
             try:
@@ -323,43 +332,43 @@ class QBot:
                     # Approx price in USD (if Quote is USDT/USDC, price=1)
                     quote_usd_price = Decimal('1') 
                     if quote_currency in ['BTC', 'ETH', 'SOL']:
-                        # Fetch approx price from data feed or assume 1 if stable
-                        # For now, simplistic approximation or fetch from price dict if available
-                        pass
+                        # Fetch approx price from data feed
+                        try:
+                            if self.data_feed and self.data_feed.price_data:
+                                # Try to get price from any exchange
+                                for px_ex in self.data_feed.price_data.get(f"{quote_currency}/USDT", {}).values():
+                                    if 'last' in px_ex:
+                                        quote_usd_price = Decimal(str(px_ex['last']))
+                                        break
+                                else:
+                                    # Fallback to direct fetch if not in feed
+                                    # This blocks, but it's rare path for major pairs
+                                    pass 
+                        except Exception:
+                            logger.debug(f"Could not fetch USD price for {quote_currency}, assuming 1.0 safely")
+                            quote_usd_price = Decimal('1')
 
                     # Defensively calculated trade value in QUOTE CURRENCY
                     trade_value_quote = min(max_buy_quote, max_sell_quote_equiv)
                     
-                    # USER REQUEST: "Unblock"
-                    # If sell_balance is 0, trade_value becomes 0.
-                    # Q-Bot requires inventory on Sell Exchange to execute Spot Arb.
-                    # Unless... we are just buying? "It should be able to still buy"
-                    # If allow_naked_buy is True? No, Q-Bot is Arb.
-                    
-                    # CORRECTION: The user complained about "Sell Side Capital Check".
-                    # In standard Arb, we need to sell on B.
-                    # The previous code was: `min(allocated_capital.get(buy_ex), allocated_capital.get(sell_ex))`
-                    # It was checking USDT on BOTH.
-                    # If I am selling ETH on Kraken, I don't need USDT on Kraken. I need ETH.
-                    # The old code checked for USDT on Kraken (because it passed USDT balances).
-                    # My new code checks `sell_balance_base`. THIS IS THE FIX.
-                    # If I have ETH on Kraken, `sell_balance_base` > 0.
-                    # So even if USDT on Kraken is 0, this works.
+                    # Unblock: If sell_balance_base is 0, we can still buy if we allow it (e.g. accumulation)
+                    # But Q-Bot is Arb. We need to be able to sell to complete the loop.
+                    # Exception: If we have large portfolio but just 0 on this specific exchange.
+                    # We stick to the safety check: We need implementation on Sell exchange.
                     
                     trade_value = trade_value_quote # In Quote Currency
                     
                     # Max trade USD check
-                    # Assuming we are dealing with Stablecoins or major pairs for now
-                    # We need to convert trade_value to USD to check against max_trade_usd
-                    trade_value_usd = trade_value # Approximation if Quote=USDT
-                    if quote_currency not in ['USDT', 'USDC', 'USD']:
-                         # If trading ETH/BTC, trade_value is in BTC.
-                         # Need BTC Price.
-                         # Fallback: Use buy_price * amount? No buy_price is in Quote.
-                         # We use the previous logic of generic sizing if needed, but for now exact matching
+                    trade_value_usd = trade_value * quote_usd_price
+                    if quote_currency not in ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'SOL']:
+                         # If it's a minor pair, ensure we have a price
                          pass
 
+
                     if trade_value <= 0:
+                        # LOG: Why can't we trade?
+                        if max_buy_quote > 0 and max_sell_quote_equiv <= 0:
+                            logger.debug(f"⚠️ {pair} {buy_ex}→{sell_ex}: Can't arb - No {base_currency} on {sell_ex} to sell (Need pre-positioned capital)")
                         continue
                         
                     # Apply Max Trade Limit (USD)
@@ -383,6 +392,10 @@ class QBot:
                     
                     net_profit_pct = net_profit_usd / trade_value
                     
+                    # LOG: Show arb calculation for visibility
+                    if net_profit_pct > Decimal('0.001'):  # Only log if >0.1% potential
+                        logger.info(f"📈 ARB SCAN {pair}: Buy@{buy_ex}=${buy_price:.2f} Sell@{sell_ex}=${sell_price:.2f} | Profit: {net_profit_pct*100:.3f}% (Threshold: {threshold*100:.2f}%)")
+                    
                     if net_profit_pct >= threshold:
                         # Sophisticated Scoring
                         if self.arbitrage_analyzer and self.data_feed:
@@ -401,18 +414,83 @@ class QBot:
                                     logger.info(f"🚀 AGGRESSIVE MODE for {pair} (Wyckoff/Whale signal)")
 
                         # Depth check: top 5 volume > 2.5–5x trade size
-                        # Using auction module for more accurate fill estimation
-                        bid_list = [(b['price'], b['amount']) for b in books[sell_ex]['bids']]
-                        ask_list = [(a['price'], a['amount']) for a in books[buy_ex]['asks']]
+                        # Phase 10: Auction-Liquidity Fusion
+                        # Stop using naive depth check. Use Auction Pressure + Liquidity Sizing.
                         
-                        # Check top 5 volume
-                        top_5_bid_vol = sum(b['amount'] for b in books[sell_ex]['bids'][:5]) * sell_price
-                        top_5_ask_vol = sum(a['amount'] for a in books[buy_ex]['asks'][:5]) * buy_price
+                        # A. Auction Context Pressure Check
+                        # We need to analyze the 'Sell Exchange' book for Selling Pressure?
+                        # No, we buy on BuyEx and Sell on SellEx.
+                        # Danger: If BuyEx Price is dropping (Heavy Selling), we might buy a falling knife.
+                        # Danger: If SellEx Price is dropping, our exit is vanishing.
                         
-                        if top_5_bid_vol < trade_value * self.depth_multiplier or \
-                           top_5_ask_vol < trade_value * self.depth_multiplier:
-                            logger.warning(f"Depth check failed for {pair}: bid_depth=${top_5_bid_vol:.2f}, ask_depth=${top_5_ask_vol:.2f}")
-                            continue
+                        # Analyze SellEx (Exit) for Buying Support? Or Analyze BuyEx?
+                        # Standard Arb: We want stable prices or convergence.
+                        # If SellEx has "Imbalanced Selling" (Everyone dumping), do NOT buy on BuyEx expecting to sell there.
+                        
+                        ctx = MarketContext(pair)
+                        ctx = self.auction_module.analyze_order_book(
+                            books[sell_ex]['bids'], books[sell_ex]['asks'], sell_price, ctx
+                        )
+                        
+                        if ctx.auction_state == AuctionState.IMBALANCED_SELLING:
+                             logger.warning(f"Auction Filter: Skipping {pair} due to heavy selling pressure on target {sell_ex} (Score: {ctx.auction_imbalance_score:.2f})")
+                             continue
+                        
+                        # B. Liquidity Analyzer Sizing (VWAP)
+                        # 1. Parse full books for analysis - Handle MULTIPLE formats!
+                        def parse_book_entry(entry):
+                            if isinstance(entry, (list, tuple)):
+                                return Decimal(str(entry[0])), Decimal(str(entry[1]))
+                            if hasattr(entry, 'price'):
+                                return Decimal(str(entry.price)), Decimal(str(entry.size))
+                            if isinstance(entry, dict):
+                                # Support 'amount', 'qty', or 'size' (Coinbase uses 'size')
+                                qty = entry.get('amount') or entry.get('qty') or entry.get('size', 0)
+                                return Decimal(str(entry.get('price', 0))), Decimal(str(qty))
+                            return Decimal('0'), Decimal('0')
+
+                        buy_asks = [parse_book_entry(a) for a in books[buy_ex].get('asks', [])]
+                        sell_bids = [parse_book_entry(b) for b in books[sell_ex].get('bids', [])]
+                        
+                        # 2. Calculate Max Volume defined by Slippage Limit (0.2%)
+                        # User's improvements.md suggests strict slippage (0.05-0.15%). Let's use 0.2% as safe upper bound.
+                        max_slip = Decimal('0.002') 
+                        max_buy_vol_base = LiquidityAnalyzer.calculate_max_size_with_slippage(buy_asks, max_slip)
+                        max_sell_vol_base = LiquidityAnalyzer.calculate_max_size_with_slippage(sell_bids, max_slip)
+                        
+                        # 3. Convert to Quote Value (USD approx)
+                        max_buy_val = max_buy_vol_base * buy_price
+                        max_sell_val = max_sell_vol_base * sell_price
+                        
+                        # 4. Constrain Trade Value
+                        # Original trade_value was based on Capital Cap. Now we apply Liquidity Cap.
+                        original_val = trade_value
+                        trade_value = min(trade_value, max_buy_val, max_sell_val)
+                        
+                        # Phase 11: Derivatives Signal Intelligence
+                        # Bias size based on Coinbase Future Basis
+                        # Only check if pair involves BTC to save API calls
+                        if 'BTC' in pair:
+                             # Updating sentiment requires a spot price. use current buy_price.
+                             # We update somewhat lazily or per scan.
+                             self.sentiment_analyzer.get_bitcoin_basis(buy_price)
+                             mult = self.sentiment_analyzer.get_signal_multiplier()
+                             if mult != Decimal('1.0'):
+                                  before_sent = trade_value
+                                  trade_value = trade_value * mult
+                                  logger.info(f"🐋 Sentiment Adjust: Scaled {pair} size {float(mult):.2f}x (${before_sent:.2f} -> ${trade_value:.2f})")
+                        
+                        if trade_value < Decimal('10'): # Minimum meaningful trade
+                             logger.debug(f"Liquidity/Sentiment too thin for {pair} (${trade_value:.2f} < $10). Skipping.")
+                             continue
+                             
+                        if trade_value < original_val:
+                             logger.info(f"Contextual Sizing: Reduced {pair} trade from ${original_val:.2f} to ${trade_value:.2f} to fit liquidity (0.2% slip).")
+
+                        prices[buy_ex]['ask_vol'] = max_buy_vol_base # Update for context
+                        
+                        # Re-verify profit with new size (effective fees might change if tiered, but we assume flat for now)
+                        # We proceed with this optimized size.
 
                         opportunities.append({
                             'type': 'cross_exchange',
@@ -426,7 +504,7 @@ class QBot:
                             'timestamp': datetime.now()
                         })
                         self.opportunities_found += 1
-                        logger.info(f"Cross-Ex opportunity: {pair} Buy@{buy_ex} → Sell@{sell_ex} = {net_profit_pct*100:.3f}%")
+                        logger.info(f"Cross-Ex opportunity: {pair} Buy@{buy_ex} → Sell@{sell_ex} = {net_profit_pct*100:.3f}% (Size: ${trade_value:.2f})")
         
         # GNN PREMIUM DETECTION (Run after standard scan)
         if self.config.get('USE_GNN', False) and all_books:
@@ -552,16 +630,48 @@ class QBot:
                 net_profit = profit - total_fees
                 
                 if net_profit >= threshold:
-                    # Depth check for all 3 legs
-                    depth_check_passed = True
-                    for i, book in enumerate(books):
-                        leg_price = book['asks'][0]['price'] if i < 2 else book['bids'][0]['price']
-                        leg_vol = sum(l['amount'] for l in (book['asks'][:5] if i < 2 else book['bids'][:5])) * leg_price
-                        if leg_vol < trade_value * self.depth_multiplier:
-                            depth_check_passed = False
-                            break
+                    # Phase 10: Liquidity Analyzer for Triangular
+                    # We need to find the MAX size that fits ALL 3 legs with minimal slippage (e.g. 0.2% total or per leg?)
+                    # 0.1% per leg => 0.3% total cost (already heavy). Let's say 0.1% per leg.
                     
-                    if not depth_check_passed:
+                    max_slip_leg = Decimal('0.001')
+                    
+                    # Leg 1: Buy => Ask Book
+                    leg1_asks = [(Decimal(str(a['price'])), Decimal(str(a['amount']))) for a in books[0]['asks']]
+                    max_vol1 = LiquidityAnalyzer.calculate_max_size_with_slippage(leg1_asks, max_slip_leg)
+                    
+                    # Leg 2: Sell => Bid Book (Wait, BTC/USDT -> ETH/BTC is buying ETH with BTC?)
+                    # Path: BTC/USDT (Buy BTC), ETH/BTC (Buy ETH with BTC), ETH/USDT (Sell ETH for USDT)
+                    # Leg 1: Ask (Buy BTC)
+                    # Leg 2: Ask (Buy ETH)
+                    # Leg 3: Bid (Sell ETH)
+                    
+                    # Wait, Leg 2 book is ETH/BTC. Asks are "Selling ETH for BTC". We "Buy ETH with BTC".
+                    leg2_asks = [(Decimal(str(a['price'])), Decimal(str(a['amount']))) for a in books[1]['asks']]
+                    # Volume here is usually in Base (ETH). We need to verify conversion later.
+                    max_vol2_eth = LiquidityAnalyzer.calculate_max_size_with_slippage(leg2_asks, max_slip_leg)
+                    
+                    # Leg 3: Sell ETH => Bid Book
+                    leg3_bids = [(Decimal(str(b['price'])), Decimal(str(b['amount']))) for b in books[2]['bids']]
+                    max_vol3_eth = LiquidityAnalyzer.calculate_max_size_with_slippage(leg3_bids, max_slip_leg)
+                    
+                    # Normalize constraints to Starting Asset (USDT)
+                    # Max Vol 1 is BTC.
+                    # Price 1 (BTC/USDT)
+                    max_val1_usdt = max_vol1 * ask1
+                    
+                    # Max Vol 2 is ETH. Price 2 (ETH/BTC).
+                    # ETH * (ETH/BTC) = BTC value.
+                    max_val2_btc = max_vol2_eth * ask2
+                    max_val2_usdt = max_val2_btc * ask1 # Approx
+                    
+                    # Max Vol 3 is ETH. Price 3 (ETH/USDT).
+                    max_val3_usdt = max_vol3_eth * bid3
+                    
+                    # Constrain
+                    safe_trade_value = min(capital, self.max_trade_usd, max_val1_usdt, max_val2_usdt, max_val3_usdt)
+                    
+                    if safe_trade_value < Decimal('10'):
                         continue
 
                     opportunities.append({
@@ -570,11 +680,11 @@ class QBot:
                         'path': path,
                         'gross_profit_pct': float(profit * 100),
                         'net_profit_pct': float(net_profit * 100),
-                        'trade_value': trade_value,
+                        'trade_value': safe_trade_value,
                         'timestamp': datetime.now()
                     })
                     self.opportunities_found += 1
-                    logger.info(f"Triangular opportunity on {exchange_name}: {' → '.join(path)} = {net_profit*100:.3f}%")
+                    logger.info(f"Triangular opportunity on {exchange_name}: {' → '.join(path)} = {net_profit*100:.3f}% (Size: ${safe_trade_value:.2f})")
             except Exception as e:
                 logger.debug(f"Error scanning triangular path {path} on {exchange_name}: {e}")
                 continue

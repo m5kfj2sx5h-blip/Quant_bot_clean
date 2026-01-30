@@ -46,16 +46,25 @@ class CoinbaseAdvancedAdapter:
             
             if asset:
                 for acc in accounts:
-                    if acc and getattr(acc, 'currency', None) == asset.upper():
-                        return Decimal(str(acc.available_balance.value))
+                    # Handle both object and dict (SDK vs Raw)
+                    currency = getattr(acc, 'currency', acc.get('currency') if isinstance(acc, dict) else None)
+                    if currency == asset.upper():
+                        bal = getattr(acc, 'available_balance', acc.get('available_balance') if isinstance(acc, dict) else None)
+                        if isinstance(bal, dict):
+                            return Decimal(str(bal.get('value', '0')))
+                        return Decimal(str(getattr(bal, 'value', '0')))
                 return Decimal('0')
             else:
                 balances = {}
                 for acc in accounts:
                     if acc:
-                        currency = getattr(acc, 'currency', None)
+                        currency = getattr(acc, 'currency', acc.get('currency') if isinstance(acc, dict) else None)
                         if currency:
-                            balances[currency] = Decimal(str(acc.available_balance.value))
+                            bal = getattr(acc, 'available_balance', acc.get('available_balance') if isinstance(acc, dict) else None)
+                            if isinstance(bal, dict):
+                                balances[currency] = Decimal(str(bal.get('value', '0')))
+                            else:
+                                balances[currency] = Decimal(str(getattr(bal, 'value', '0')))
                 return balances
         except Exception:
             return Decimal('0') if asset else {}
@@ -80,7 +89,23 @@ class CoinbaseAdvancedAdapter:
 
     def get_order_book(self, symbol: Symbol, limit: int = 5) -> Any:
         product_id = str(symbol).replace('/', '-')
-        return self.client.get_product_book(product_id=product_id, limit=limit)
+        response = self.client.get_product_book(product_id=product_id, limit=limit)
+        
+        # Normalize to standard format: {'bids': [[price, qty], ...], 'asks': [[price, qty], ...]}
+        # Coinbase SDK returns GetProductBookResponse with .pricebook.bids/asks as [{'price': ..., 'size': ...}]
+        pricebook = getattr(response, 'pricebook', None)
+        if pricebook:
+            def extract_bid_ask(item):
+                if isinstance(item, dict):
+                    return [item.get('price', '0'), item.get('size', '0')]
+                elif hasattr(item, 'price'):
+                    return [item.price, item.size]
+                return ['0', '0']
+            
+            bids = [extract_bid_ask(b) for b in getattr(pricebook, 'bids', [])]
+            asks = [extract_bid_ask(a) for a in getattr(pricebook, 'asks', [])]
+            return {'bids': bids, 'asks': asks}
+        return {'bids': [], 'asks': []}
 
     def get_ticker_price(self, symbol: Symbol) -> Price:
         product_id = str(symbol).replace('/', '-')
@@ -105,6 +130,35 @@ class CoinbaseAdvancedAdapter:
             return True
         except:
             return False
+
+    def get_order(self, order_id: str, symbol: Symbol) -> Dict:
+        """Fetch order status and fill details."""
+        try:
+            order_res = self.client.get_order(order_id=order_id)
+            # Wrapper handling
+            order = getattr(order_res, 'order', order_res)
+            
+            raw_status = getattr(order, 'status', 'OPEN')
+            status_map = {
+                'OPEN': 'open', 'FILLED': 'closed', 'CANCELLED': 'canceled',
+                'EXPIRED': 'canceled', 'FAILED': 'canceled', 'PENDING': 'open'
+            }
+            status = status_map.get(raw_status, 'open')
+            
+            filled = Decimal(str(getattr(order, 'filled_size', '0')))
+            avg_price = Decimal(str(getattr(order, 'average_filled_price', '0')))
+            fee = Decimal(str(getattr(order, 'total_fees', '0')))
+            
+            return {
+                'status': status,
+                'filled': filled,
+                'remaining': Decimal('0'), # Advanced Trade SDK total_size might differ, simplified
+                'avg_price': avg_price,
+                'fee': fee
+            }
+        except Exception as e:
+            return {'status': 'unknown', 'error': str(e), 'filled': Decimal('0'), 'avg_price': Decimal('0')}
+
 
     def get_supported_pairs(self) -> List[Symbol]:
         try:
@@ -154,11 +208,13 @@ class CoinbaseAdvancedAdapter:
                     'name': asset,
                     'can_stake': False, # Will be updated if staking assets found
                     'networks': {
+                    'networks': {
                         'BASE': {
-                            'withdraw_fee': Decimal('0.00'), # Base is preferred
+                            'withdraw_fee': None, # Unknown unless fetched live
                             'withdraw_enabled': True,
                             'deposit_enabled': True
                         }
+                    }
                     }
                 }
                 

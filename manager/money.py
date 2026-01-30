@@ -19,22 +19,70 @@ class MoneyManager:
         self.exchanges = exchanges
         self.staking_manager = staking_manager
         self.signals_manager = signals_manager
-        self.drift_threshold = Decimal('0.15')
+        self.drift_threshold = Decimal('0.35')
         self.conversion_manager = ConversionManager(exchanges=exchanges)
         self.transfer_manager = TransferManager(exchanges, 'USDT', True, market_registry)
         self.mode_manager = mode_manager or ModeManager(None, None)
+        self.market_registry = market_registry
         self.portfolio = portfolio
         self.capital_mode = "balanced"
         self._cache = {}
         self.cache_ttl = 300  # 5 min
         self.retry_count = 3
-        # self._load_config()
+        self._load_config()
         logger.info(f"⚖️ MONEY MANAGER Initialized")
 
+    async def update_balances(self):
+        """Fetch latest balances and update portfolio state."""
+        balances = self._fetch_balances()
+        price_data = {} # Need prices for BTC calc... 
+        # For initial log, we might accept 0 for BTC if prices aren't ready, 
+        # OR we try to fetch from registry?
+        if self.market_registry:
+            # Quick price reconstruction
+            books = self.market_registry.get_all_books() or {}
+            # Flatten to expected price_data format logic if possible, 
+            # but simpler: just assume USDT/USD are 1:1 for TPV estimate
+            pass
+        
+        # Update Portfolio
+        if self.portfolio:
+            self.portfolio.exchange_balances = {}
+            total_portfolio_value = Decimal('0')
+            
+            from domain.entities import Balance
+            for ex_name, balance in balances.items():
+                self.portfolio.exchange_balances[ex_name] = {}
+                for currency, amount in balance.items():
+                    self.portfolio.exchange_balances[ex_name][currency] = Balance(
+                        currency=currency, total=amount, free=amount, used=Decimal('0')
+                    )
+                    # Simplified TPV estimation for startup check
+                    if currency in ['USDT', 'USDC', 'USD', 'PAXG']: # PAXG ~ Spot Gold
+                        total_portfolio_value += amount
+                        # Note: BTC value skipped here if no price data yet, acceptable for init log
+            
+            self.portfolio.total_value_usd = total_portfolio_value
+        
+        return balances
+
     def _load_config(self):
-        pass  # No ops values
+        try:
+            import json
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+                self.critical_drift_threshold = Decimal(str(config.get('DRIFT_THRESHOLD_CRITICAL', '0.95')))
+                self.small_account_mode = config.get('SMALL_ACCOUNT_MODE', True) # Default to True for safety
+                logger.info(f"Loaded critical drift threshold: {self.critical_drift_threshold}, Small Account Mode: {self.small_account_mode}")
+        except Exception as e:
+            logger.warning(f"Failed to load settings: {e}. using default 0.95/True")
+            self.critical_drift_threshold = Decimal('0.95')
+            self.small_account_mode = True
 
     def generate_macro_plan(self, price_data, min_btc_reserve, min_stable_reserve):
+        # Config reload (mock dynamic reload)
+        self._load_config()
+        
         from domain.entities import Balance
         balances = self._fetch_balances()
         total_values = {}
@@ -105,42 +153,125 @@ class MoneyManager:
             logger.info(f"Drift detected for {len(drift_data)} assets. Analyzing Smart Correction Cost...")
             
             # Smart Drift Logic: Compare Transfer Cost vs Conversion Loss
-            # 1. Estimate Transfer Cost (Default Estimates based on research)
-            # Solana/AVAX: ~$0.10, TRON: ~$1.00, ERC20: ~$5.00
-            transfer_cost_est = Decimal('5.00') # Conservative default
-            # TODO: Future optimization - query TransferManager for exact network fee
+            # 1. Estimate Transfer Cost (Dynamic - NO GUESSING)
+            transfer_cost_est = None
+            try:
+                # Find cheapest withdrawal fee across all exchanges for the drifting assets
+                costs = []
+                drift_assets = [d[0] for d in drift_data]
+                for asset in drift_assets:
+                    # Query TransferManager for the absolute best fee available (Live or Registry)
+                    fee = self.transfer_manager.get_lowest_fee_estimate(asset)
+                    if fee is not None:
+                        costs.append(fee)
+                
+                if costs:
+                    transfer_cost_est = min(costs) # Best case scenario
+                    logger.info(f"Dynamic Transfer Cost Estimate: ${transfer_cost_est:.2f} (Cheapest found)")
+                else:
+                    logger.warning("Could not fetch ANY dynamic fees for drift assets. Aborting Transfer Strategy evaluation to prevent guessing.")
+                    transfer_cost_est = None
+
+            except Exception as e:
+                logger.error(f"Error estimating transfer cost: {e}")
+                transfer_cost_est = None
             
+            # If we don't know the cost, we cannot proceed with Transfer Strategy
+            if transfer_cost_est is None:
+                 logger.warning("Skipping Transfer Strategy due to missing fee data. Falling back to Internal Conversion check.")
+                 # Fallback logic: Try conversion immediately
+                 books = {}
+                 if self.market_registry:
+                     books = self.market_registry.get_all_books() or {}
+                 self.conversion_manager.control_drift(drift_data, books=books)
+                 return {}
+
             # 2. Estimate Conversion Loss (Spread + Fee ~ 0.2%)
             # We take the max drift amount to estimate the impact
             max_drift_amount = max([d[1] for d in drift_data]) * total_portfolio_value
             conversion_loss_est = max_drift_amount * Decimal('0.002')
             
-            logger.info(f"Smart Correction Analysis: Transfer Cost (~${transfer_cost_est}) vs Internal Conversion Loss (~${conversion_loss_est:.2f})")
+            logger.info(f"Smart Correction Analysis: Transfer Cost (~${transfer_cost_est:.2f}) vs Internal Conversion Loss (~${conversion_loss_est:.2f})")
             
             use_transfer = False
+            conversion_tried = False
+            
             # Decision Matrix
             if conversion_loss_est < transfer_cost_est:
-                if any(d[1] >= Decimal('0.35') for d in drift_data):
-                    logger.warning("Drift is critical (>35%) - Forcing Transfer despite higher cost")
+                if any(d[1] >= self.critical_drift_threshold for d in drift_data):
+                    logger.warning(f"Drift is critical (>{self.critical_drift_threshold*100}%) - Forcing Transfer despite higher cost")
                     use_transfer = True
                 else:
                     logger.info(f"Internal Conversion is cheaper (Save ${transfer_cost_est - conversion_loss_est:.2f}) - Attempting local fix")
-                    if self.conversion_manager.control_drift(drift_data):
+                    
+                    books = {}
+                    if self.market_registry:
+                        books = self.market_registry.get_all_books() or {}
+                        
+                    conversion_tried = True
+                    if self.conversion_manager.control_drift(drift_data, books=books):
                         return {}
                     logger.warning("Internal conversion failed/skipped, falling back to check transfer")
                     use_transfer = True
             else:
                 logger.info(f"Transfer is cheaper (Save ${conversion_loss_est - transfer_cost_est:.2f}) - Attempting Transfer")
                 use_transfer = True
+            
+            # --- PHASE 9: POSITIONAL ARB (Smart Rebalancing) ---
+            if self.small_account_mode and use_transfer:
+                # Calculate Potential Profit from the Drift (Conceptually, the arbitrage profit we made to CAUSE this drift)
+                # Or simply: Is the 'Correction Benefit' worth the 'Gas Fee'?
+                # Actually, Positional Arb means we tolerate drift until it's huge.
+                # So we check: Is the amount to be transferred large enough that the fee is < 1%?
+                # Or better: Is (DriftAmount * ArbitrageEdge) > 3 * TransferCost?
+                # Simplified Expert Logic: Only transfer if Drift Value > $500 (Hard Min) AND Cost < 1%
+                
+                # Check 1: Is drift critical?
+                is_critical = any(d[1] >= self.critical_drift_threshold for d in drift_data)
+                
+                if not is_critical:
+                    # Check 2: Efficiency Ratio
+                    # If we transfer $100 and pay $10 fee, that's 10% loss. Bad.
+                    # We want fee < 1% at least. So TransferAmount > 100 * Fee.
+                    # transfer_cost_est is the fee.
+                    min_efficient_transfer = transfer_cost_est * 100
+                    
+                    # Estimate value to be moved
+                    # drift_data has (asset, pct_deviation).
+                    # approx_move_val = max_deviation * total_portfolio
+                    max_dev = max([d[1] for d in drift_data])
+                    approx_move_val = max_dev * total_portfolio_value
+                    
+                    if approx_move_val < min_efficient_transfer:
+                        logger.info(f"🛑 Positional Arb: Drift (${approx_move_val:.2f}) too small for efficient transfer (Need >${min_efficient_transfer:.2f}). Accumulating.")
+                        use_transfer = False
+                        # Also suppress conversion if it's just rebalancing
+                        # If we block transfer, do we fallback to conversion? 
+                        # NO, positional arb means we HOLD the drift.
+                        return {}
+                    else:
+                        logger.info(f"✅ Positional Arb: Drift (${approx_move_val:.2f}) large enough for efficient transfer (Fee < 1%). Proceeding.")
+            # ----------------------------------------------------
 
             if use_transfer:
                 try:
                     logger.info("Running Transfer Manager to balance accounts...")
-                    self.transfer_manager.balance_accounts()
+                    # balance_accounts returns True if action was taken, False if skipped
+                    if not self.transfer_manager.balance_accounts():
+                         logger.warning("Transfer Manager skipped (e.g. min amount or no path).")
+                         if not conversion_tried:
+                             logger.info("FALLING BACK TO INTERNAL CONVERSION.")
+                             self.conversion_manager.control_drift(drift_data)
+                         else:
+                             logger.warning("Drift Unresolvable: Both Conversion and Transfer strategies failed/skipped for this cycle.")
+                             
                 except Exception as e:
-                    logger.error(f"Transfer Manager failed: {e}. FALLING BACK TO INTERNAL CONVERSION.")
-                    # Resilience: Fallback to conversion if transfer fails
-                    self.conversion_manager.control_drift(drift_data)
+                    logger.error(f"Transfer Manager failed: {e}.")
+                    if not conversion_tried:
+                        logger.info("FALLING BACK TO INTERNAL CONVERSION.")
+                        self.conversion_manager.control_drift(drift_data)
+                    else:
+                        logger.warning("Drift Unresolvable: Both Conversion and Transfer strategies failed/skipped for this cycle.")
         
         return {}
 

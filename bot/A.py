@@ -68,7 +68,7 @@ class ABot:
         if self.staking_manager:
             self.default_stake_coin = self.staking_manager.get_highest_apy_coin()
         if not self.default_stake_coin:
-            self.default_stake_coin = 'SOL'  # Good staking fallback
+            self.default_stake_coin = 'ETH'  # Good staking fallback (was SOL)
         logger.info(f"Fetched default stake coin from API: {self.default_stake_coin}")
 
     def get_empty_slots(self) -> int:
@@ -104,7 +104,7 @@ class ABot:
             return False
         best_exchange_name, best_price = self._find_best_buy_price(coin)
         if not best_exchange_name:
-            logger.error(f"❌ Could not find exchange to buy {coin}")
+            logger.warning(f"⚠️ Could not find exchange to buy {coin} (Exchange/Pair not found)")
             return False
         
         amount = self.slot_size_usd / best_price
@@ -215,9 +215,32 @@ class ABot:
             
         return best_exchange, best_price
 
+    def _is_market_data_ready(self, coin: str) -> bool:
+        """Check if we have market data for the target coin."""
+        if not self.market_registry:
+            return False
+        
+        books = self.market_registry.get_all_books()
+        if not books:
+            return False
+            
+        # Check if any exchange has a book for this coin
+        for ex, pairs in books.items():
+            for p in pairs:
+                if p.startswith(f"{coin}/"):
+                    return True
+        return False
+
     def check_seat_warmers(self) -> None:
         self._fetch_allowed_coins()  # Refresh dynamic
         self._fetch_default_stake_coin()
+        
+        # Prevent premature execution if registry doesn't have data for our target
+        target_coin = self.default_stake_coin
+        if self.market_registry and not self._is_market_data_ready(target_coin):
+            logger.debug(f"⏳ Market Registry missing data for {target_coin}, skipping seat warmer check")
+            return
+
         empty_slots = self.get_empty_slots()
         if empty_slots > self.seat_warmer_empty_threshold:
             logger.info(f"Chair {empty_slots} empty slots, adding seat warmer")
@@ -226,14 +249,22 @@ class ABot:
             self._remove_oldest_seat_warmer()
 
     def _add_seat_warmer(self) -> bool:
+        # Cooldown check to prevent log spam
+        import time
+        if hasattr(self, 'last_seat_warmer_attempt') and time.time() - self.last_seat_warmer_attempt < 60:
+            return False
+            
         coin = self.default_stake_coin
         if coin in self.positions:
             for c in self.allowed_coins:
                 if c not in self.positions:
                     coin = c
                     break
+        
+        self.last_seat_warmer_attempt = time.time()
+        
         if coin in self.positions:
-            logger.warning("All target coins already held, cannot add seat warmer")
+            # logger.warning("All target coins already held...") # Silenced for cleaner logs
             return False
             
         success = self._execute_buy(coin) # Reuse logic

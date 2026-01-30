@@ -1,6 +1,7 @@
 {
   "cache_ttl_minutes": 5,
   "retry_count": 3,
+  "SMALL_ACCOUNT_MODE": true,
   "api_endpoints": {
     "binanceus": "https://api.binance.us",
     "kraken": "https://api.kraken.com",
@@ -10,5 +11,46 @@
   "MARKET_DATA_ENABLED": true,
   "USE_GNN": true,
   "QUADRANT_ALPHA": true,
-  "ALPHA_THRESHOLD": 1.5
+  "ALPHA_THRESHOLD": 1.0,
+  "DRIFT_THRESHOLD_CRITICAL": 0.85,
+  "min_transfer_usd": 500,
+  "risk": {
+    "max_trade_pct_tpv": 0.95,
+    "min_spread_pct": 0.008,
+    "max_trade_usd": 100000,
+    "depth_multiplier_min": 2.5
+  },
+  "paper_mode": false,
+  "transfer_wallets": {
+    "binanceus": {
+      "SOL": "6nVkZ9DhUGpCSikwmwykjZkPCJkQEASVKKnrEScj3Ya8",
+      "AVAX": "0x9433ef65333256178a317bdefb8c18ad49b22350",
+      "TRX": "THiAU5ReTWR9TBWVTv1WRKBY7j9qeZXFkw"
+    },
+    "kraken": {
+      "SOL": "FnFSRzQDSa1kfFKABS6onFid1yncwYC6TqKcCXe2bcQa",
+      "AVAX": "0x18791c1Ec171169B4E599A01D280a325500f1BB5",
+      "SUI": "0x29d57083b1b274d6e78155c147f87a9964b8a9e0e28b890ec10a984447e35eab",
+      "ALGO": "SMN5HNKR45Z6GB546A5KRI2AGODAYKSPMXLGL5PB5SFY6URD4MANLLAPKI",
+      "TRX": "TLEvYy9aYUztMYqxvXcLshEdvqWwNFysMK"
+    },
+    "coinbase": {
+      "SOL": "rfXgbu6jQVgEThszwPBvCgHPq2LX59m4qZSLbneqczw",
+      "AVAX": "0x27FA5C63e7f7c2D07b349A8F44cc29870A32f8C6",
+      "SUI": "0xc8cb27799a08da6f64e77f1267d3330fb5e01b13d6cbad1914e81ce069dc4ed6",
+      "ALGO": "XFDI7INMVW32QUKO4QRBHNOIGSNA5AOX2MVWP5DHH3PUXX4JOCPWBF46AU",
+      "SOL_2": "Ch2d4gvee8jnJ384xacj4bsp3YWKAG9yMDS2u2MeWmcw",
+      "SUI_2": "0xf36f79b4353442fe95b5ddeaa2dafeada617d67b598ea1cf0d3d41a3153e5e61"
+    }
+  },
+  "general": {
+    "latency_mode": "laptop",
+    "stake_coin": "ETH",
+    "transfer_stable": "USDT",
+    "withdraw_enabled": false,
+    "auto_transfer_enabled": false,
+    "alert_email": "mrahim_md@icloud.com",
+    "webhook_port": 8090,
+    "gold_sweep_max_per_month": 2
+  }
 }

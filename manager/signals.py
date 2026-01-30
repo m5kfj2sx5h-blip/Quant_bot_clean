@@ -69,6 +69,9 @@ class MacroHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
 class SignalServer:
     def __init__(self, macro_callback: Callable, abot_callback: Optional[Callable] = None):
         self.macro_callback = macro_callback
@@ -96,7 +99,7 @@ class SignalServer:
 
     def start(self):
         try:
-            self.server = HTTPServer(('0.0.0.0', self.port), MacroHandler)
+            self.server = ReusableHTTPServer(('0.0.0.0', self.port), MacroHandler)
             self.server.signal_callback = self._handle_signal
             self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.server_thread.start()
@@ -108,4 +111,5 @@ class SignalServer:
     def stop(self):
         if self.server:
             self.server.shutdown()
+            self.server.server_close()
             logger.info("Signal Server stopped")

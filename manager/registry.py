@@ -27,9 +27,16 @@ class MarketRegistry:
             self._order_books[exchange][symbol] = book
             self._last_update[f"{exchange}_{symbol}_book"] = time.time()
 
-    def get_order_book(self, exchange: str, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_order_book(self, exchange: str, symbol: str) -> Optional[Dict]:
+        """Thread-safe retrieval of order book."""
         with self._lock:
             return self._order_books.get(exchange, {}).get(symbol)
+
+    def get_all_books(self) -> Dict:
+        """Thread-safe retrieval of ALL order books."""
+        with self._lock:
+            # Return deep copy or direct ref? Direct ref for speed, assuming read-only
+            return {k: v.copy() for k, v in self._order_books.items()}
 
     def update_assets(self, exchange: str, data: Dict[str, Any]):
         with self._lock:
@@ -86,6 +93,17 @@ class MarketRegistry:
                 if meta.get('can_stake', False):
                     assets.append(asset)
             return assets
+
+    def get_supported_networks(self) -> List[str]:
+        """Aggregate all supported networks across all exchanges/assets."""
+        with self._lock:
+            networks = set()
+            for ex_data in self._asset_metadata.values():
+                for asset_data in ex_data.values():
+                    if 'networks' in asset_data:
+                        for net in asset_data['networks'].keys():
+                            networks.add(net)
+            return list(networks)
 
 class RegistryWorker:
     """

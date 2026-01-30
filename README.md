@@ -17,6 +17,8 @@ You operate within a 3-layer architecture that separates concerns to maximize re
 - You're the glue between intent and execution. E.g., don't try scraping websites yourself—read `directives/scrape_website.md` and run `execution/scrape_single_site.py`.  
 - Focus on decision-making; push complexity to deterministic code.
 
+“Before writing any code, scan and quote the exact balance-fetching examples from the linked official docs—Binance, Kraken, Coinbase—treat them as gospel, no shortcuts, no CCXT, just pure SDK calls.this is MUST just as using Decimal is MUSt with money”
+
 **Layer 3: Execution (Doing the work)**  
 - Deterministic Python scripts in `execution/` (or equivalent).  
 - Environment variables, API tokens, etc. stored in `.env`.  
@@ -218,6 +220,18 @@ Implement precisely.
 
 ##### STEP 3 "PREMUIM [Q-Bot] & conversion.py EDITION - NEEDS TO BE APPLIED TO BOTH TRIANGULAR ARBITRAGES - Efficient Triangular Arbitrage Detection via Graph Neural Networks"
 SEARCH ONLINE TO LEARN HOW TO BEST APPLY THIS TO OUR STRATEGY:
+
+https://github.com/pyg-team/pytorch_geometric
+
+https://www.geeksforgeeks.org/deep-learning/graph-neural-networks-with-pytorch/?limit=10
+
+https://pytorch-geometric.readthedocs.io/en/latest/
+
+https://arxiv.org/html/2502.03194v1
+
+
+
+
 **Prompt 2: Add GNN Arbitrage Detection (Update 1 – after aggregator is in)**  
 You are a senior Python developer for crypto bots. Additions only, no changes to existing logic.
 

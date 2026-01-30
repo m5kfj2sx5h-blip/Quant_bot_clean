@@ -127,6 +127,38 @@ class BinanceUSAdapter:
             **(params or {})
         )
 
+    def get_order(self, order_id: str, symbol: Symbol) -> Dict:
+        """Fetch order status and fill details."""
+        try:
+            res = self.client.get_order(symbol=str(symbol).replace('/', ''), orderId=order_id)
+            # Map status
+            status_map = {
+                'NEW': 'open',
+                'PARTIALLY_FILLED': 'open',
+                'FILLED': 'closed',
+                'CANCELED': 'canceled',
+                'PENDING_CANCEL': 'open',
+                'REJECTED': 'canceled',
+                'EXPIRED': 'canceled'
+            }
+            status = status_map.get(res['status'], 'open')
+            exec_qty = Decimal(res['executedQty'])
+            cumm_quote = Decimal(res['cummulativeQuoteQty'])
+            
+            avg_price = Decimal('0')
+            if exec_qty > 0:
+                avg_price = cumm_quote / exec_qty
+            
+            return {
+                'status': status,
+                'filled': exec_qty,
+                'remaining': Decimal(res['origQty']) - exec_qty,
+                'avg_price': avg_price,
+                'fee': Decimal('0') # Binance doesn't return trade fee in order status easily
+            }
+        except Exception as e:
+            return {'status': 'unknown', 'error': str(e), 'filled': Decimal('0'), 'avg_price': Decimal('0')}
+
     def cancel_order(self, order_id: str, symbol: Symbol) -> bool:
         try:
             self.client.cancel_order(str(symbol).replace('/', ''), orderId=order_id)

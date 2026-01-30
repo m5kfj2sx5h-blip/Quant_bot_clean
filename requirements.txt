@@ -28,5 +28,5 @@ apscheduler
 # --- GNN ARBITRAGE (Step 3 Premium) ---
 torch>=2.0.0
 torch-geometric>=2.4.0
-networkx>=3.0ccxt
+networkx>=3.0
 matplotlib

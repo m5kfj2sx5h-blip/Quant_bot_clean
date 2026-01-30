@@ -9,7 +9,8 @@ import os
 load_dotenv('config/.env')
 
 class KrakenAdapter:
-    def __init__(self):
+    def __init__(self, config: Dict = None):
+        self.config = config or {}
         api_key = os.getenv('KRAKEN_KEY')
         api_secret = os.getenv('KRAKEN_SECRET')
         self.client = KrakenSpot(key=api_key, secret=api_secret)
@@ -20,30 +21,100 @@ class KrakenAdapter:
         return "kraken"
 
     def get_balance(self, asset: Optional[str] = None) -> Any:
+        # Kraken uses non-standard symbols - normalize them
+        SYMBOL_MAP = {
+            'XXBT': 'BTC', 'XBT': 'BTC',
+            'XETH': 'ETH',
+            'XXRP': 'XRP',
+            'XLTC': 'LTC',
+            'XXDG': 'DOGE', 'XDG': 'DOGE',
+            'ZUSD': 'USD',
+            'ZEUR': 'EUR',
+            'ZGBP': 'GBP',
+        }
+        REVERSE_MAP = {v: k for k, v in SYMBOL_MAP.items()}  # BTC -> XXBT
+        
         balance = self.user_client.get_account_balance()
+        
         if asset:
-            return Decimal(balance.get(asset.upper(), '0'))
-        return {k: Decimal(str(v)) for k, v in balance.items()}
+            # Try both normalized and Kraken format
+            kraken_asset = REVERSE_MAP.get(asset.upper(), asset.upper())
+            return Decimal(balance.get(asset.upper(), balance.get(kraken_asset, '0')))
+        
+        # Return normalized keys
+        result = {}
+        for k, v in balance.items():
+            normalized = SYMBOL_MAP.get(k.upper(), k.upper())
+            result[normalized] = Decimal(str(v))
+        return result
 
     def get_all_balances(self) -> Dict[str, Dict[str, Decimal]]:
         """Fetch all balances from Kraken."""
+        # Kraken uses non-standard symbols - normalize them
+        SYMBOL_MAP = {
+            'XXBT': 'BTC', 'XBT': 'BTC',
+            'XETH': 'ETH',
+            'XXRP': 'XRP',
+            'XLTC': 'LTC',
+            'XXDG': 'DOGE', 'XDG': 'DOGE',
+            'ZUSD': 'USD',
+            'ZEUR': 'EUR',
+            'ZGBP': 'GBP',
+        }
+        
         balance = self.user_client.get_account_balance()
         balances = {}
         for asset, amount in balance.items():
             val = Decimal(str(amount))
             if val > 0:
-                balances[asset.upper()] = {
+                # Normalize the asset name
+                normalized = SYMBOL_MAP.get(asset.upper(), asset.upper())
+                balances[normalized] = {
                     'free': val,
                     'total': val
                 }
         return balances
 
+    def _to_kraken_symbol(self, symbol: str) -> str:
+        """Convert normalized symbol (BTC/USDT) to Kraken format (XBTUSDT)."""
+        # Kraken uses non-standard symbols
+        REVERSE_MAP = {
+            'BTC': 'XBT',  # Kraken uses XBT not BTC
+            'DOGE': 'XDG',
+        }
+        
+        # Parse the symbol
+        if '/' in symbol:
+            base, quote = symbol.split('/')
+        else:
+            base, quote = symbol[:3], symbol[3:] if len(symbol) > 3 else ''
+        
+        # Convert to Kraken format
+        kraken_base = REVERSE_MAP.get(base.upper(), base.upper())
+        kraken_quote = quote.upper()
+        
+        return f"{kraken_base}{kraken_quote}"
+
     def get_order_book(self, symbol: Symbol, limit: int = 5) -> Dict:
-        pair = str(symbol).replace('/', '')
-        return self.market_client.get_order_book(pair=pair, count=limit)
+        pair = self._to_kraken_symbol(str(symbol))
+        response = self.market_client.get_order_book(pair=pair, count=limit)
+        
+        # Kraken returns nested dict: {'XBTUSDT': {'bids': [[price, qty, ts], ...], 'asks': [...]}}
+        # Normalize to standard format: {'bids': [[price, qty], ...], 'asks': [[price, qty], ...]}
+        if isinstance(response, dict) and len(response) == 1:
+            # Unwrap the nested response
+            inner = list(response.values())[0]
+            if isinstance(inner, dict) and 'bids' in inner:
+                # Strip timestamp from triplets
+                bids = [[b[0], b[1]] for b in inner.get('bids', [])]
+                asks = [[a[0], a[1]] for a in inner.get('asks', [])]
+                return {'bids': bids, 'asks': asks}
+        
+        # Fallback if already in expected format
+        return response if isinstance(response, dict) and 'bids' in response else {'bids': [], 'asks': []}
 
     def get_ticker_price(self, symbol: Symbol) -> Price:
-        pair = str(symbol).replace('/', '')
+        pair = self._to_kraken_symbol(str(symbol))
         ticker = self.market_client.get_ticker_information(pair=pair)
         # The official SDK returns a dict where keys are the pair names if called without list,
         # or it might return it directly. Assuming it follows Kraken API structure.
@@ -96,27 +167,41 @@ class KrakenAdapter:
 
     def get_asset_metadata(self) -> Dict[str, Any]:
         """Fetch asset network info dynamically from Kraken."""
-        assets_info = self.market_client.get_assets()
         assets = {}
+        # Fetch generic info
+        assets_info = self.market_client.get_assets()
         
-        # We only poll a subset of networks to avoid rate limits if needed, 
-        # but for discovery we try to map assets.
+        # We focus on STABLES for Transfers (USDT, USDC) to avoid rate limits on 100+ coins
+        target_assets = ['USDT', 'USDC']
+        
         for key, a in assets_info.items():
             asset_name = a.get('altname', key)
+            # Default to Unknown/None if not fetched
+            withdraw_fee = None 
+            
+            if asset_name in target_assets:
+                try:
+                    # Kraken requires a 'key' (address name) to check fee. 
+                    # If we don't have one, we can't check specific network fee easily without specific endpoint.
+                    # We try 'get_withdraw_info' if we can guess a key or if it allows null key?
+                    # Fallback: Use public asset info if available or leave None.
+                    # The public AssetPairs doesn't show withdraw fees.
+                    # We'll leave it None so functionality triggers "Live Fetch" in TransferManager if needed.
+                    pass
+                except:
+                    pass
+
             assets[asset_name] = {
                 'name': asset_name,
                 'can_stake': 'staking' in a.get('status', '').lower(),
                 'networks': {
-                    'KRAKEN': {
-                        'withdraw_fee': Decimal('0.0005'), # Default fallback
+                    'KRAKEN': { 
+                        'withdraw_fee': withdraw_fee, 
                         'withdraw_enabled': a.get('status') == 'enabled',
                         'deposit_enabled': a.get('status') == 'enabled'
                     }
                 }
             }
-            
-        # Optional: Try to fetch real withdrawal methods for major arb assets
-        # This can be expensive API-wise, so we do it sparingly if registry worker calls it.
         return assets
 
     def fetch_deposit_address(self, asset: str, method: str = 'Solana') -> Dict:
@@ -125,11 +210,60 @@ class KrakenAdapter:
 
     def withdraw(self, asset: str, amount: Decimal, address: str, key: str) -> Dict:
         """Execute withdrawal from Kraken."""
+        # --- PAPER MODE CHECK ---
+        is_paper = str(self.config.get('paper_mode', 'false')).lower() == 'true'
+        if is_paper:
+            return {'refid': f'paper_withdraw_{asset}_{amount}'}
+        # ------------------------
+        
         # Kraken uses 'key' (withdrawal template name) or address
-        return self.user_client.withdraw_funds(asset=asset, amount=str(amount), key=key)
+        try:
+             # Try standard withdrawal
+             return self.user_client.withdraw_funds(asset=asset, amount=str(amount), key=key)
+        except AttributeError:
+             # Fallback if method named differently in this version
+             # print("Kraken SDK version mismatch, attempting raw request")
+             return self.client.privatePostWithdraw({'asset': asset, 'key': key, 'amount': str(amount)})
+    
+    def get_order(self, order_id: str, symbol: Symbol) -> Dict:
+        """Fetch order status from Kraken."""
+        try:
+            # Kraken SDK get_orders_info expects comma-separated txids
+            res = self.user_client.get_orders_info(txid=order_id)
+            if not res or 'result' not in res or order_id not in res['result']:
+                return {'status': 'unknown', 'filled': Decimal('0'), 'avg_price': Decimal('0'), 'fee': Decimal('0')}
+            
+            info = res['result'][order_id]
+            k_status = info['status'] # pending, open, closed, canceled, expired
+            status_map = {
+                'pending': 'open',
+                'open': 'open', 
+                'closed': 'closed', 
+                'canceled': 'canceled', 
+                'expired': 'canceled'
+            }
+            status = status_map.get(k_status, 'open')
+            
+            filled = Decimal(str(info['vol_exec']))
+            cost = Decimal(str(info['cost']))
+            fee = Decimal(str(info['fee']))
+            
+            avg_price = Decimal('0')
+            if filled > 0:
+                avg_price = cost / filled
+                
+            return {
+                'status': status,
+                'filled': filled,
+                'remaining': Decimal(str(info['vol'])) - filled,
+                'avg_price': avg_price,
+                'fee': fee
+            }
+        except Exception as e:
+            return {'status': 'unknown', 'error': str(e), 'filled': Decimal('0'), 'avg_price': Decimal('0')}
 
     def place_order(self, symbol: Symbol, side: str, amount: Amount, price: Optional[Price] = None) -> Dict:
-        pair = str(symbol).replace('/', '')
+        pair = self._to_kraken_symbol(str(symbol))
         order_type = 'limit' if price else 'market'
         return self.client.create_order(pair=pair, type=side.lower(), ordertype=order_type, volume=str(amount), price=str(price) if price else None)
 
@@ -141,11 +275,28 @@ class KrakenAdapter:
             return False
 
     def get_supported_pairs(self) -> List[Symbol]:
+        # Kraken uses non-standard symbols - normalize them
+        SYMBOL_MAP = {
+            'XXBT': 'BTC', 'XBT': 'BTC',
+            'XETH': 'ETH',
+            'XXRP': 'XRP',
+            'XLTC': 'LTC',
+            'XXDG': 'DOGE', 'XDG': 'DOGE',
+            'ZUSD': 'USD',
+            'ZEUR': 'EUR',
+            'ZGBP': 'GBP',
+        }
+        
+        def normalize(sym):
+            return SYMBOL_MAP.get(sym, sym)
+        
         pairs = self.market_client.get_asset_pairs()
         result = []
         for key, s in pairs.items():
             if s.get('status') == 'online' and ('USDT' in s['quote'] or 'USDC' in s['quote'] or 'USD' in s['quote']):
-                result.append(Symbol(s['base'], s['quote']))
+                base = normalize(s['base'])
+                quote = normalize(s['quote'])
+                result.append(Symbol(base, quote))
         return result if result else [Symbol('BTC', 'USD'), Symbol('ETH', 'USD')]
 
     def stake(self, asset: str, amount: Decimal) -> Dict:

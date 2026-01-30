@@ -78,7 +78,7 @@ class SystemCoordinator:
         # 2. Initialize Adapters
         self.exchanges = {
             'binanceus': BinanceUSAdapter(),
-            'kraken': KrakenAdapter(),
+            'kraken': KrakenAdapter(self.config),
             'coinbase': CoinbaseRegularAdapter(),
             'coinbase_advanced': CoinbaseAdvancedAdapter()
         }
@@ -102,7 +102,7 @@ class SystemCoordinator:
         # 4. Initialize Managers
         self.fee_manager = FeeManager(self.config, self.exchanges, self.market_registry)
         self.staking_manager = StakingManager(self.exchanges, self.config)
-        self.transfer_manager = TransferManager(self.exchanges, 'USDT', True, self.market_registry)
+        self.transfer_manager = TransferManager(self.exchanges, 'USDT', True, self.market_registry, self.config)
         self.health_monitor = HealthMonitor(self.portfolio, self._handle_alert, self.config, logger, self.market_registry)
         self.risk_manager = RiskManager(self.portfolio, self.config)
         self.arbitrage_analyzer = ArbitrageAnalyzer(self.config, logger)
@@ -115,7 +115,14 @@ class SystemCoordinator:
         self.mode_manager = ModeManager(self.portfolio, os.getenv('WEBHOOK_PASSPHRASE'))
         if last_state and last_state.get('current_mode'):
             try:
-                self.mode_manager.current_mode = TradingMode(last_state['current_mode'])
+                # Handle legacy/uppercase mode strings
+                mode_str = last_state['current_mode'].lower()
+                if mode_str == 'btc_mode':
+                    self.mode_manager.current_mode = TradingMode.BTC_MODE
+                elif mode_str == 'gold_mode':
+                    self.mode_manager.current_mode = TradingMode.GOLD_MODE
+                else:
+                    self.mode_manager.current_mode = TradingMode(mode_str)
                 logger.info(f"💾 Restored Mode: {self.mode_manager.current_mode}")
             except Exception as e:
                 logger.warning(f"Could not restore mode from persistence: {e}")
@@ -127,13 +134,22 @@ class SystemCoordinator:
             macro_callback=self.handle_mode_change,
             abot_callback=self.handle_abot_signal
         )
-        self.signals_server.start()
+        try:
+            self.signals_server.start()
+        except Exception as e:
+            logger.critical(f"❌ Signal Server Failed to Start: {e}. Webhooks will be DISABLED, but Bot will continue.")
+            # Continue running without crashing
 
         # Initial bot check based on current mode
         await self.update_bot_states()
 
         # Link money manager to signals server if needed
         self.money_manager.signals_manager = self.signals_server
+
+        # 7. Fetch & Log REAL Initial Portfolio Value
+        await self.money_manager.update_balances()
+        real_tpv = self.portfolio.total_value_usd
+        logger.info(f"📊 Live Portfolio Value: ${real_tpv:,.2f} (Restored Profit: ${self.portfolio.total_profit_usd:,.2f})")
 
         logger.info("🚀 SYSTEM COORDINATOR Initialized")
 
@@ -296,13 +312,15 @@ class SystemCoordinator:
 
                 # 2. Q-Bot Arbitrage Scans (Always active)
                 if 'qbot' in self.bots:
-                    # Fetch live balances for sizing (Asset Agnostic + Locked Asset Protection)
-                    # 1. Fetch Raw Balances
+                    # 1. Fetch Balances & Update Trace
                     raw_balances = {}
                     for name, exchange in self.exchanges.items():
                         try:
-                            raw_balances[name] = exchange.get_balance()
-                        except Exception:
+                            # Fetch balances
+                            bal = exchange.get_balance()
+                            raw_balances[name] = bal
+                        except Exception as e:
+                            logger.error(f"   [{name.upper()}] ❌ Failed to fetch balance: {e}")
                             raw_balances[name] = {}
 
                     # 2. Get Locked Assets
@@ -314,13 +332,19 @@ class SystemCoordinator:
                     for ex_name, assets in raw_balances.items():
                         balances[ex_name] = {}
                         for coin, amount in assets.items():
-                            locked_amount = locked_a.get(coin, Decimal('0'))
-                            if coin == 'PAXG': # G-Bot specific
-                                locked_amount += locked_g.get('PAXG', Decimal('0'))
-                                
-                            free_amount = amount - locked_amount
+                            # Combined lock for this coin
+                            total_locked = locked_a.get(coin, Decimal('0'))
+                            if coin == 'PAXG': 
+                                total_locked += locked_g.get('PAXG', Decimal('0'))
+                            
+                            free_amount = amount - total_locked
+                            
                             if free_amount > 0:
                                 balances[ex_name][coin] = free_amount
+                    
+                    # Log Summary only (Concise)
+                    total_usdt = sum(b.get('USDT', 0) for b in balances.values())
+                    logger.info(f"💰 Balance Refresh: Total Free USDT ~${total_usdt:.2f}")
 
                     # Cross-exchange scan
                     cross_opps = await self.bots['qbot'].scan_cross_exchange(balances)

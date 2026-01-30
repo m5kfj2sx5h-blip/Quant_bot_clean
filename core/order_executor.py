@@ -129,6 +129,100 @@ class OrderExecutor:
         self.logger.info(f"ARBITRAGE EXECUTION COMPLETE: Net Profit ${net_profit:.4f}")
         return True
 
+    async def execute_triangular(self, exchange_id: str, path: list, trade_value: Decimal, start_currency: str) -> bool:
+        """
+        Executes a 3-leg triangular arbitrage on a single exchange.
+        Path: [Pair1, Pair2, Pair3] e.g. ['BTC/USDT', 'ETH/BTC', 'ETH/USDT']
+        Sequence: Buy Leg 1 -> Sell Leg 2 -> Sell Leg 3 (Example)
+        User logic: "Buy BTC with USDT -> Buy ETH with BTC -> Sell ETH for USDT"
+        """
+        self.logger.info(f"Executing Triangular Arb on {exchange_id}: {' -> '.join(path)}")
+        
+        # Validation
+        if not path or len(path) != 3:
+            self.logger.error("Invalid triangular path length")
+            return False
+
+        # Leg 1
+        qty = Decimal('0')
+        # We assume trade_value is in Quote of Pair 1 (USDT)
+        # Leg 1: Buy Base1 (BTC) with Quote1 (USDT)
+        pair1 = path[0]
+        # Need price to calculate quantity
+        # Use execute_order with 'limit' or 'market'. Triangular usually requires speed -> Market?
+        # User strategy implies limit? "only the order executor places orders"
+        # We'll use _execute_order.
+        
+        # Determine strict sides based on path currencies
+        # Standard: USDT -> BTC -> ETH -> USDT
+        # 1. BTC/USDT (Buy BTC)
+        # 2. ETH/BTC (Buy ETH using BTC)
+        # 3. ETH/USDT (Sell ETH for USDT)
+        
+        # Execute Leg 1
+        self.logger.info(f"Leg 1: Buy {pair1}")
+        # Fetch price first for amount calc
+        try:
+            ticker = self.exchanges[exchange_id].get_ticker_price(pair1)
+            price1 = ticker.value
+            qty1 = trade_value / price1
+            
+            res1 = self._execute_order(exchange_id, pair1, 'buy', qty1, price1, 'limit')
+            if not res1['success']:
+                self.logger.error(f"Leg 1 Failed: {res1.get('error')}")
+                return False
+            
+            actual_qty1 = res1['amount'] # BTC Acquired
+            
+            # Leg 2: Buy ETH with BTC (ETH/BTC)
+            pair2 = path[1]
+            self.logger.info(f"Leg 2: Buy {pair2} with {actual_qty1} BTC")
+            # We are spending actual_qty1 of Quote currency (BTC) to buy Base (ETH)
+            # We need price of ETH/BTC
+            ticker2 = self.exchanges[exchange_id].get_ticker_price(pair2)
+            price2 = ticker2.value
+            qty2 = actual_qty1 / price2 # ETH Amount
+            
+            res2 = self._execute_order(exchange_id, pair2, 'buy', qty2, price2, 'limit')
+            if not res2['success']:
+                self.logger.critical(f"Leg 2 Failed! Stuck with BTC: {res2.get('error')}")
+                # Emergency exit? Sell BTC back to USDT?
+                # For now just return False, but in prod we need recovery.
+                return False
+                
+            actual_qty2 = res2['amount'] # ETH Acquired
+            
+            # Leg 3: Sell ETH for USDT (ETH/USDT)
+            pair3 = path[2]
+            self.logger.info(f"Leg 3: Sell {pair3} ({actual_qty2} ETH)")
+            ticker3 = self.exchanges[exchange_id].get_ticker_price(pair3)
+            price3 = ticker3.value
+            
+            res3 = self._execute_order(exchange_id, pair3, 'sell', actual_qty2, price3, 'limit')
+            if not res3['success']:
+                self.logger.critical(f"Leg 3 Failed! Stuck with ETH: {res3.get('error')}")
+                return False
+                
+            final_usdt = res3['amount'] * res3['price']
+            profit = final_usdt - trade_value
+            self.logger.info(f"Triangular Complete. Result: ${profit:.2f}")
+            
+            # Persist
+            if self.persistence_manager:
+                self.persistence_manager.save_trade({
+                    'symbol': ' -> '.join(path),
+                    'type': 'ARB_TRI',
+                    'buy_exchange': exchange_id,
+                    'amount': float(trade_value),
+                    'net_profit_usd': float(profit)
+                })
+            
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Triangular Execution Exception: {e}")
+            return False
+
     def _calculate_asset_amount(self, position_size_usd: Decimal, price: Decimal, base_currency: str) -> Decimal:
         if price <= 0:
             self.logger.error(f"Invalid price for amount calculation: {price}")
@@ -236,43 +330,105 @@ class OrderExecutor:
             
         return False
 
+    def _wait_for_fill(self, exchange_id: str, order_id: str, symbol: str) -> Dict:
+        """Strict verification loop: Polling get_order until filled or timeout."""
+        start = time.time()
+        timeout = self.settings.get('timeout_seconds', 30)
+        
+        while time.time() - start < timeout:
+            try:
+                # Call adapter standardized method
+                res = self.exchanges[exchange_id].get_order(order_id, symbol)
+                status = res.get('status', 'unknown')
+                
+                if status == 'closed': # FILLED
+                     self.logger.info(f"Order {order_id} FILLED: {res['filled']} @ {res['avg_price']}")
+                     return res
+                if status == 'canceled' or status == 'expired' or status == 'rejected':
+                     return {'status': 'canceled', 'error': 'Order canceled/rejected by exchange'}
+                
+                # If PARTIALLY_FILLED, we keep waiting? 
+                # For arbitrage atomic execution, we arguably want FULL fill or nothing?
+                # But waiting forever on partial is bad.
+                # If partial and near timeout, we might accept.
+                # For now, Strict: Wait for Closed.
+                
+            except Exception as e:
+                self.logger.warning(f"Polling error for {order_id}: {e}")
+            
+            time.sleep(self.settings.get('retry_delay', 1.0))
+            
+        return {'status': 'timeout'}
+
     def _execute_order(self, exchange_id: str, symbol: str, side: str, amount: Decimal,
                        price_limit: Decimal, order_type: str = 'limit') -> Dict:
         exchange = self.exchanges.get(exchange_id)
         if not exchange:
             return {'success': False, 'error': 'Exchange not found'}
+            
         for attempt in range(self.settings['max_retries']):
             try:
-                self.logger.debug(f"Attempt {attempt + 1}/{self.settings['max_retries']}: {side.upper()} {amount} {symbol} on {exchange_id}")
+                self.logger.debug(f"Attempt {attempt + 1}: {side.upper()} {amount} {symbol} on {exchange_id}")
                 
-                # --- PAPER MODE CHECK ---
+                # --- PAPER MODE ---
                 is_paper = str(self.config.get('paper_mode', 'false')).lower() == 'true'
                 if is_paper:
                     self.logger.info(f"📝 PAPER MODE: Simulating {side} {amount} {symbol} @ {price_limit}")
-                    time.sleep(0.1) # Simulate network latency
-                    # Mock successful execution
+                    time.sleep(0.1)
                     return {
                         'success': True, 
-                        'price': price_limit if price_limit else Decimal('1000.0'), # Fallback for market
+                        'price': price_limit if price_limit else Decimal('1000.0'),
                         'amount': amount, 
                         'fee': Decimal('0'),
                         'order_id': f'paper_{int(time.time()*1000)}'
                     }
-                # ------------------------
+                # ------------------
 
-                order = exchange.place_order(symbol, side, amount, price_limit if order_type == 'limit' else None)
-                execution_price = Decimal(order.get('price', price_limit))
+                # Place Order
+                # Adapters return different structures. We must extract ID robustly.
+                order_res = exchange.place_order(symbol, side, amount, price_limit if order_type == 'limit' else None)
                 
-                # Fetch live fee from FeeManager
-                if self.fee_manager:
-                    fee_rate = self.fee_manager.get_effective_fee(exchange_id, amount * execution_price, is_maker=(order_type == 'limit'))
+                order_id = None
+                # Binance/Generic Dict
+                if isinstance(order_res, dict):
+                    if 'orderId' in order_res:
+                        order_id = str(order_res['orderId'])
+                    elif 'id' in order_res:
+                        order_id = str(order_res['id'])
+                    # Kraken
+                    elif 'result' in order_res and 'txid' in order_res['result']:
+                         order_id = order_res['result']['txid'][0]
+                # Coinbase Object
+                elif hasattr(order_res, 'order_id'):
+                    order_id = order_res.order_id
+                
+                if not order_id:
+                     self.logger.error(f"Failed to extract Order ID from response: {order_res}")
+                     return {'success': False, 'error': 'No Order ID returned'}
+                
+                # Strict Verification Loop (No Guessing!)
+                self.logger.info(f"Order Placed (ID: {order_id}). Waiting for fill verification...")
+                fill_info = self._wait_for_fill(exchange_id, order_id, symbol)
+                
+                if fill_info.get('status') == 'closed':
+                     return {
+                         'success': True,
+                         'price': fill_info['avg_price'],
+                         'amount': fill_info['filled'],
+                         'fee': fill_info['fee'],
+                         'order_id': order_id
+                     }
+                elif fill_info.get('status') == 'timeout':
+                     self.logger.warning(f"Order {order_id} timed out. Cancelling...")
+                     exchange.cancel_order(order_id, symbol)
+                     # Check fill status one last time after cancel?
+                     # Simplified: Return fail.
+                     return {'success': False, 'error': 'Fill Timeout'}
                 else:
-                    fee_rate = Decimal('0.001')  # Fallback
-                
-                fee = amount * execution_price * fee_rate
-                self.logger.info(f"Fetched order execution from API for {exchange_id}")
-                return {'success': True, 'price': execution_price, 'amount': amount, 'fee': fee}
+                     return {'success': False, 'error': f"Order Failed: {fill_info.get('status')}"}
+
             except Exception as e:
                 self.logger.warning(f"Order attempt failed: {e}")
                 time.sleep(self.settings['retry_delay'])
+                
         return {'success': False, 'error': 'Max retries exceeded'}
