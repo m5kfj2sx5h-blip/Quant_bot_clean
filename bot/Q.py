@@ -211,7 +211,16 @@ class QBot:
         if not self.pairs or not hasattr(self, '_pairs_fetched_at') or (datetime.now() - self._pairs_fetched_at).seconds > 300:
             self._fetch_pairs()
             self._pairs_fetched_at = datetime.now()
+            
+            # FIX: Ensure DataFeed subscribes to these pairs (Multi-Pair Fix)
+            if self.data_feed and hasattr(self.data_feed, 'subscribe'):
+                logger.info(f"📡 Updating DataFeed subscriptions for {len(self.pairs)} pairs")
+                if asyncio.iscoroutinefunction(self.data_feed.subscribe):
+                    await self.data_feed.subscribe(self.pairs)
+                else:
+                    self.data_feed.subscribe(self.pairs)
         
+        logger.info(f"🔄 Scanning {len(self.pairs)} pairs for arbitrage...")
         opportunities = []
         
         # Volatility slowdown: double cycle time if market is stressed

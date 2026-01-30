@@ -347,7 +347,9 @@ class SystemCoordinator:
                     logger.info(f"💰 Balance Refresh: Total Free USDT ~${total_usdt:.2f}")
 
                     # Cross-exchange scan
+                    logger.info("🎯 Starting Q-Bot cross-exchange scan...")
                     cross_opps = await self.bots['qbot'].scan_cross_exchange(balances)
+                    logger.info(f"🎯 Q-Bot scan complete: {len(cross_opps)} opportunities")
                     for opp in sorted(cross_opps, key=lambda x: x['net_profit_pct'], reverse=True):
                         success = await self.bots['qbot'].execute_cross_exchange(opp)
                         if success: break  # Only one cross-ex per cycle to avoid double-spending same balance
