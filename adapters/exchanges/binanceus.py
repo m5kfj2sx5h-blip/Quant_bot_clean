@@ -64,9 +64,13 @@ class BinanceUSAdapter:
     def fetch_fees(self) -> Dict[str, Any]:
         """Fetch standardized fee structure."""
         account_info = self.client.account()
+        # Binance.US returns commission as integer basis points (10 = 0.001 = 0.1%)
+        # Must divide by 10000 to get decimal rate
+        maker_bps = account_info.get('makerCommission', 10)  # Default 10 bps = 0.1%
+        taker_bps = account_info.get('takerCommission', 10)  # Default 10 bps = 0.1%
         return {
-            'maker': Decimal(str(account_info.get('makerCommission', 0.001))),
-            'taker': Decimal(str(account_info.get('takerCommission', 0.001))),
+            'maker': Decimal(str(maker_bps)) / Decimal('10000'),
+            'taker': Decimal(str(taker_bps)) / Decimal('10000'),
             'bnb_discount': account_info.get('canUseBnbForFees', False),
             'raw': account_info
         }

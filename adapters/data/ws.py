@@ -100,8 +100,10 @@ class BinanceUSWebSocket:
         for callback in self.callbacks:
             try:
                 await callback(data)
+            except (TypeError, ValueError, KeyError) as e:
+                self.logger.error(f"Callback data error in {callback.__name__ if hasattr(callback, '__name__') else 'callback'}: {e}")
             except Exception as e:
-                self.logger.error(f"Callback error: {e}")
+                self.logger.error(f"Unexpected callback error in {callback.__name__ if hasattr(callback, '__name__') else 'callback'}: {e}")
 
 
 class KrakenWebSocket:
@@ -182,8 +184,10 @@ class KrakenWebSocket:
         for callback in self.callbacks:
             try:
                 await callback(data)
+            except (TypeError, ValueError, KeyError) as e:
+                self.logger.error(f"Callback data error in {callback.__name__ if hasattr(callback, '__name__') else 'callback'}: {e}")
             except Exception as e:
-                self.logger.error(f"Callback error: {e}")
+                self.logger.error(f"Unexpected callback error in {callback.__name__ if hasattr(callback, '__name__') else 'callback'}: {e}")
 
 
 class CoinbaseWebSocket:
@@ -279,8 +283,10 @@ class CoinbaseWebSocket:
         for callback in self.callbacks:
             try:
                 await callback(data)
+            except (TypeError, ValueError, KeyError) as e:
+                self.logger.error(f"Callback data error in {callback.__name__ if hasattr(callback, '__name__') else 'callback'}: {e}")
             except Exception as e:
-                self.logger.error(f"Callback error: {e}")
+                self.logger.error(f"Unexpected callback error in {callback.__name__ if hasattr(callback, '__name__') else 'callback'}: {e}")
 
 
 class CoinbaseAdvancedWebSocket:
@@ -375,5 +381,7 @@ class CoinbaseAdvancedWebSocket:
         for callback in self.callbacks:
             try:
                 await callback(data)
+            except (TypeError, ValueError, KeyError) as e:
+                self.logger.error(f"Callback data error in {callback.__name__ if hasattr(callback, '__name__') else 'callback'}: {e}")
             except Exception as e:
-                self.logger.error(f"Callback error: {e}")
+                self.logger.error(f"Unexpected callback error in {callback.__name__ if hasattr(callback, '__name__') else 'callback'}: {e}")

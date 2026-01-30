@@ -94,11 +94,11 @@ class DataFeed:
         self.data_callbacks.append(callback)
 
     async def _process_incoming_data(self, data: Dict):
-        for callback in self.data_callbacks:
+        for i, callback in enumerate(self.data_callbacks):
             try:
                 await callback(data)
             except Exception as e:
-                self.logger.error(f"Data callback error: {e}")
+                self.logger.error(f"Data callback #{i} error (function: {callback.__name__ if hasattr(callback, '__name__') else 'unknown'}): {e}")
 
     def update_market_context(self, symbol: str, exchange: str, bids: List, asks: List, last_price: float, trades: List = None):
         try:

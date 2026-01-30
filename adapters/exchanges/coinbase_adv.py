@@ -25,18 +25,27 @@ class CoinbaseAdvancedAdapter:
 
     def fetch_fees(self) -> Dict[str, Any]:
         """Fetch standardized fee structure for Coinbase Advanced."""
-        summary = self.client.get_transaction_summary()
-        # Official SDK returns nested objects or dicts depending on version
-        # Assuming summary.fee_tier logic
-        taker = Decimal(str(getattr(summary, 'taker_fee_rate', '0.006')))
-        maker = Decimal(str(getattr(summary, 'maker_fee_rate', '0.004')))
-        
-        return {
-            'maker': maker,
-            'taker': taker,
-            'bnb_discount': False,
-            'raw': summary
-        }
+        try:
+            # Try the correct SDK method name
+            summary = self.client.get_transaction_summary()
+            # Official SDK returns nested objects or dicts depending on version
+            taker = Decimal(str(getattr(summary, 'taker_fee_rate', '0.006')))
+            maker = Decimal(str(getattr(summary, 'maker_fee_rate', '0.004')))
+
+            return {
+                'maker': maker,
+                'taker': taker,
+                'bnb_discount': False,
+                'raw': summary
+            }
+        except AttributeError:
+            # Fallback to Coinbase Advanced default tier (retail)
+            return {
+                'maker': Decimal('0.004'),  # 0.4% maker
+                'taker': Decimal('0.006'),  # 0.6% taker
+                'bnb_discount': False,
+                'raw': {'fallback': True, 'reason': 'get_transaction_summary() not available'}
+            }
 
     def get_balance(self, asset: Optional[str] = None) -> Any:
         """Fetch balance for one or all assets."""
@@ -81,8 +90,9 @@ class CoinbaseAdvancedAdapter:
                 accounts = getattr(response, 'accounts', [])
                 cursor = getattr(response, 'cursor', None)
                 has_more = getattr(response, 'has_more', False)
-                # Fail-safe if cursor is empty string/None despite has_more
-                if not cursor: has_more = False
+                # Fail-safe: Stop if cursor is empty/None OR if no accounts returned (prevents infinite loop)
+                if not cursor or not accounts:
+                    has_more = False
 
                 for acc in accounts:
                     if acc:

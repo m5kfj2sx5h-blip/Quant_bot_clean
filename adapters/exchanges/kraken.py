@@ -230,37 +230,48 @@ class KrakenAdapter:
         try:
             # Kraken SDK get_orders_info expects comma-separated txids
             res = self.user_client.get_orders_info(txid=order_id)
-            if not res or 'result' not in res or order_id not in res['result']:
-                return {'status': 'unknown', 'filled': Decimal('0'), 'avg_price': Decimal('0'), 'fee': Decimal('0')}
-            
-            info = res['result'][order_id]
-            k_status = info['status'] # pending, open, closed, canceled, expired
+
+            # Validate response structure
+            if not res:
+                return {'status': 'unknown', 'error': 'Empty response', 'filled': Decimal('0'), 'avg_price': Decimal('0'), 'fee': Decimal('0')}
+
+            # Kraken may return direct dict or nested 'result'
+            if isinstance(res, dict) and order_id in res:
+                info = res[order_id]
+            elif isinstance(res, dict) and 'result' in res and order_id in res['result']:
+                info = res['result'][order_id]
+            else:
+                return {'status': 'unknown', 'error': 'Order ID not in response', 'filled': Decimal('0'), 'avg_price': Decimal('0'), 'fee': Decimal('0')}
+
+            k_status = info.get('status', 'unknown')
             status_map = {
                 'pending': 'open',
-                'open': 'open', 
-                'closed': 'closed', 
-                'canceled': 'canceled', 
+                'open': 'open',
+                'closed': 'closed',
+                'canceled': 'canceled',
                 'expired': 'canceled'
             }
             status = status_map.get(k_status, 'open')
-            
-            filled = Decimal(str(info['vol_exec']))
-            cost = Decimal(str(info['cost']))
-            fee = Decimal(str(info['fee']))
-            
+
+            filled = Decimal(str(info.get('vol_exec', '0')))
+            cost = Decimal(str(info.get('cost', '0')))
+            fee = Decimal(str(info.get('fee', '0')))
+
             avg_price = Decimal('0')
             if filled > 0:
                 avg_price = cost / filled
-                
+
             return {
                 'status': status,
                 'filled': filled,
-                'remaining': Decimal(str(info['vol'])) - filled,
+                'remaining': Decimal(str(info.get('vol', '0'))) - filled,
                 'avg_price': avg_price,
                 'fee': fee
             }
+        except (KeyError, ValueError, TypeError) as e:
+            return {'status': 'unknown', 'error': f'Parse error: {str(e)}', 'filled': Decimal('0'), 'avg_price': Decimal('0'), 'fee': Decimal('0')}
         except Exception as e:
-            return {'status': 'unknown', 'error': str(e), 'filled': Decimal('0'), 'avg_price': Decimal('0')}
+            return {'status': 'unknown', 'error': f'Unexpected error: {str(e)}', 'filled': Decimal('0'), 'avg_price': Decimal('0'), 'fee': Decimal('0')}
 
     def place_order(self, symbol: Symbol, side: str, amount: Amount, price: Optional[Price] = None) -> Dict:
         pair = self._to_kraken_symbol(str(symbol))

@@ -125,7 +125,7 @@ class QBot:
                          # self.exchanges[best_ex].place_order(opp['symbol'], 'buy', amount, best_price)
                          # We use OrderExecutor for safety if possible, or raw if simple.
                          # Since this is "Sniper", raw might be faster, but let's stick to raw for now as planned.
-                         res = self.exchanges[best_ex].place_order(opp['symbol'], 'buy', float(amount), float(best_price))
+                         res = self.exchanges[best_ex].place_order(opp['symbol'], 'buy', amount, best_price)
                          if res:
                             executed.append(plan)
                             # Persist
@@ -134,8 +134,8 @@ class QBot:
                                     'symbol': opp['symbol'],
                                     'type': 'ALPHA_SNIPE',
                                     'buy_exchange': best_ex,
-                                    'amount': float(amount),
-                                    'net_profit_usd': 0.0 # Unknown yet
+                                    'amount': amount,  # Keep as Decimal
+                                    'net_profit_usd': Decimal('0')  # Unknown yet, use Decimal
                                 })
                      except Exception as e:
                          logger.error(f"[ALPHA] Execution Failed: {e}")
