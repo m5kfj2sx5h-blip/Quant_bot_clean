@@ -39,13 +39,15 @@ class MacroHandler(BaseHTTPRequestHandler):
                 payload_secret = data.get('secret')
                 if payload_secret == secret:
                     authorized = True
+                else:
+                    logger.warning(f"Secret Mismatch: Received '{payload_secret}' vs Expected '{secret[:5]}...'")
             
             # If no secret env var is set, allow all (Test Mode)
             if not secret:
                 authorized = True
                 
             if not authorized:
-                logger.warning("Unauthorized webhook request")
+                logger.warning(f"Unauthorized webhook request. Headers: {self.headers}")
                 self.send_response(401)
                 self.end_headers()
                 return

@@ -70,20 +70,44 @@ class CoinbaseAdvancedAdapter:
             return Decimal('0') if asset else {}
 
     def get_all_balances(self) -> Dict[str, Dict[str, Decimal]]:
-        """Fetch all accounts from Coinbase Advanced."""
+        """Fetch all accounts from Coinbase Advanced (with Pagination)."""
         try:
-            response = self.client.get_accounts()
-            accounts = getattr(response, 'accounts', [])
             balances = {}
-            for acc in accounts:
-                if acc:
-                    total = Decimal(str(acc.hold.value)) + Decimal(str(acc.available_balance.value))
-                    if total > 0:
-                        balances[acc.currency.upper()] = {
-                            'free': Decimal(str(acc.available_balance.value)),
-                            'total': total
-                        }
+            cursor = None
+            has_more = True
+            
+            while has_more:
+                response = self.client.get_accounts(limit=250, cursor=cursor)
+                accounts = getattr(response, 'accounts', [])
+                cursor = getattr(response, 'cursor', None)
+                has_more = getattr(response, 'has_more', False)
+                # Fail-safe if cursor is empty string/None despite has_more
+                if not cursor: has_more = False
+
+                for acc in accounts:
+                    if acc:
+                        # Safe attribute access
+                        hold_val = Decimal('0')
+                        avail_val = Decimal('0')
+                        
+                        if hasattr(acc, 'hold') and hasattr(acc.hold, 'value'):
+                             hold_val = Decimal(str(acc.hold.value))
+                        
+                        if hasattr(acc, 'available_balance') and hasattr(acc.available_balance, 'value'):
+                             avail_val = Decimal(str(acc.available_balance.value))
+                             
+                        total = hold_val + avail_val
+                        
+                        if total > 0:
+                            balances[acc.currency.upper()] = {
+                                'free': avail_val,
+                                'total': total
+                            }
+                            
             return balances
+        except Exception as e:
+            # print(f"Coinbase Balance Error: {e}") 
+            return {}
         except Exception:
             return {}
 

@@ -231,11 +231,6 @@ def initialize_exchanges():
             'status': "ONLINE",
             'color': '#0052ff',
             'logo': 'Ⓒ'
-        },
-        'coinbase': {
-            'status': "ONLINE",
-            'color': '#0052ff',
-            'logo': 'Ⓒ'
         }
     }
     return exchanges
@@ -276,6 +271,9 @@ def fetch_exchange_balances():
     btc_price = prices.get('BTC/USDT', Decimal('40000'))
     
     for name, balances in raw_balances.items():
+        if name not in exchanges_config:
+            continue
+            
         exchange_net_worth = Decimal('0')
         asset_details_exchange = {}
         btc_amount = Decimal('0')
@@ -283,23 +281,52 @@ def fetch_exchange_balances():
         
         for asset, amount_str in balances.items():
             amount = Decimal(amount_str)
+            if amount == 0: continue
+            
             value = Decimal('0')
             
-            if asset in ['USD', 'USDT', 'USDC']:
+            if asset in ['USD', 'USDT', 'USDC', 'USDG', 'DAI']: # Stablecoins
                 value = amount
                 stable_amount += amount
-            elif asset == 'BTC':
+            elif asset == 'BTC' or asset == 'XXBT': # BTC
                 value = amount * btc_price
-                btc_amount = amount
+                btc_amount += amount # XXBT is BTC
                 total_btc += amount
-            elif asset == 'PAXG':
-                paxg_price = prices.get('PAXG/USDT', Decimal('2000'))
+            elif asset == 'PAXG' or asset == 'XAUT': # Gold
+                paxg_price = prices.get('PAXG/USDT', Decimal('2300'))
                 value = amount * paxg_price
-            elif asset == 'ETH':
-                eth_price = prices.get('ETH/USDT', Decimal('2500'))
+            elif asset in ['ETH', 'XETH']: # ETH
+                eth_price = prices.get('ETH/USDT', prices.get('ETH/USD', Decimal('3000')))
                 value = amount * eth_price
+            elif asset in ['XRP', 'XXRP']: # XRP
+                price = prices.get('XRP/USDT', prices.get('XRP/USD', Decimal('0.50')))
+                value = amount * price
+            elif asset in ['SOL']: # SOL
+                price = prices.get('SOL/USDT', prices.get('SOL/USD', Decimal('100.0')))
+                value = amount * price
+            elif asset in ['ADA']: # ADA
+                price = prices.get('ADA/USDT', prices.get('ADA/USD', Decimal('0.50')))
+                value = amount * price
+            elif asset in ['DOT']: # DOT
+                price = prices.get('DOT/USDT', prices.get('DOT/USD', Decimal('7.0')))
+                value = amount * price
+            elif asset in ['DOGE', 'XXDG', 'XDG']: # DOGE
+                price = prices.get('DOGE/USDT', prices.get('DOGE/USD', Decimal('0.10')))
+                value = amount * price
             else:
-                value = amount * Decimal('1') # Generic fallback
+                # Dynamic Price Lookup (Fix for PEPE/SHIB $1 bug)
+                # Try finding Asset/USDT, Asset/USD
+                ticker = f"{asset}/USDT"
+                ticker_usd = f"{asset}/USD"
+                
+                if ticker in prices:
+                    value = amount * prices[ticker]
+                elif ticker_usd in prices:
+                    value = amount * prices[ticker_usd]
+                else:
+                    # If price unknown, DO NOT assume $1. Assume 0 or minor value.
+                    # We can't value it accurately.
+                    value = Decimal('0')
                 
             if asset in asset_details:
                 asset_details[asset]['amount'] += amount
@@ -312,10 +339,10 @@ def fetch_exchange_balances():
             asset_details_exchange[asset] = {
                 'amount': float(amount),
                 'value': float(value),
-                'free': float(amount) # Snapshot assumes total=free for simplicity
+                'free': float(amount)
             }
             
-        config = exchanges_config.get(name, {'color': '#ffffff', 'logo': '?'})
+        config = exchanges_config.get(name)
         balance_data.append({
             'Exchange': name.upper(),
             'NetWorth': float(exchange_net_worth),
@@ -737,12 +764,10 @@ def main():
         account_text = ""
         for balance in balance_data:
             status_color = "#00ffa3" if balance['Status'] == 'ONLINE' else "#ff4757"
-            account_text += f"""
-            <div style='display: flex; justify-content: space-between; font-size: 0.75rem; margin: 0.1rem 0;'>
-                <span style='color: {balance["Color"]};'>{balance['Logo']} {balance['Exchange']}:</span>
-                <span>${balance['NetWorth']:,.0f}</span>
-            </div>
-            """
+            account_text += f"""<div style='display: flex; justify-content: space-between; font-size: 0.75rem; margin: 0.1rem 0;'>
+<span style='color: {balance["Color"]};'>{balance['Logo']} {balance['Exchange']}:</span>
+<span>${balance['NetWorth']:,.0f}</span>
+</div>"""
         
         st.markdown(f"""
         <div class="metric-card">
