@@ -1,12 +1,12 @@
 """
-Unit tests for ConversionManagerFixed
+Unit tests for ConversionManager
 Verifies Decimal precision and fee-aware profit calculations
 """
 import sys
 sys.path.insert(0, '/Users/dj3bosmacbookpro/Desktop/quant_bot_FIXED')
 
 from decimal import Decimal
-from conversion import ConversionManagerFixed
+from conversion import ConversionManager
 
 def test_triangular_profit_calculation():
     """
@@ -30,7 +30,7 @@ def test_triangular_profit_calculation():
 
     # Setup
     config = {'min_conversion_profit_pct': '0.3'}
-    manager = ConversionManagerFixed(config=config)
+    manager = ConversionManager(config=config)
 
     # Mock order books in Registry format
     books = {
@@ -122,7 +122,7 @@ def test_unprofitable_triangular():
     print("=" * 60)
 
     config = {'min_conversion_profit_pct': '0.3'}
-    manager = ConversionManagerFixed(config=config)
+    manager = ConversionManager(config=config)
 
     # Mock books with tight spreads
     books = {
@@ -174,7 +174,7 @@ def test_decimal_precision():
     print("=" * 60)
 
     config = {}
-    manager = ConversionManagerFixed(config=config)
+    manager = ConversionManager(config=config)
 
     books = {
         'test_ex': {
@@ -223,7 +223,7 @@ def test_decimal_precision():
 
 
 if __name__ == '__main__':
-    print("ConversionManagerFixed Unit Tests")
+    print("ConversionManager Unit Tests")
     print("=" * 60)
 
     results = []

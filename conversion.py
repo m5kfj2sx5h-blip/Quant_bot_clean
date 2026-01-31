@@ -1,5 +1,5 @@
 """
-FIXED Conversion Manager - Proper Decimal Usage and Triangular Execution
+Conversion Manager - Proper Decimal Usage and Triangular Execution
 Per improvements.md: Small accounts MUST use same-exchange triangular as primary strategy
 """
 import itertools
@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
-class ConversionManagerFixed:
+class ConversionManager:
     """
     Manages internal conversions (triangular arbitrage) to rebalance capital without transfers.
     All money calculations use Decimal per architecture requirements.
